@@ -1,10 +1,10 @@
 # Student
 
 Appserver mit Hono zur Verwaltung von Studierendendaten (Aufgabe 3 im Modul
-Softwareengineering, Hochschule Karlsruhe, Prof. Dr. Jürgen Zimmermann).
+Software Engineering, Hochschule Karlsruhe).
 
 Fachlich entspricht das Projekt unserer Aufgabe 1 (`student`, FastAPI), technisch
-orientiert es sich am Hono-Beispielprojekt „buch“ des Profs. Wir gehen nach dessen
+orientiert es sich am Hono-Beispielprojekt „buch“ aus der Vorlesung. Wir gehen nach dessen
 `VORGEHENSWEISE.md` schrittweise vor.
 
 ## Überblick (geplant)
@@ -28,13 +28,22 @@ orientiert es sich am Hono-Beispielprojekt „buch“ des Profs. Wir gehen nach 
 
 Rollen: `admin` und `student`.
 
+## Schnellstart
+
+Voraussetzungen: Node ≥ 26.13 und pnpm ≥ 12.17 (ältere 26er- bzw. 12er-Versionen
+laufen mit Warnung).
+
+```powershell
+pnpm install
+pnpm run hello      # Server unter http://localhost:3000, beenden mit Strg+C
+```
+
 ## Stand
 
-Projektstart: Repository mit README, `.gitignore`, `.editorconfig` und
-`.gitattributes`. Nächster Schritt laut Fahrplan: pnpm und Hono mit einem
-„Hello World“-GET-Request.
+„Hello World“ mit Hono: `GET /` liefert `{"msg":"Hello World"}`
+(`src/index-hello.mts`). Nächster Schritt laut Fahrplan: Server mit TLS (HTTPS).
 
 ## Team
 
-- Rico Hornung ([Freud170](https://github.com/Freud170))
-- [JM01332](https://github.com/JM01332)
+- [@Freud170](https://github.com/Freud170)
+- [@JM01332](https://github.com/JM01332)

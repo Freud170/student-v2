@@ -1,0 +1,18 @@
+# https://pnpm.io/settings
+# Angelehnt an das Hono-Beispielprojekt aus der Vorlesung
+
+# Exakte Versionen in package.json eintragen, z.B. "5.0.0-rc.0" statt "^5.0.0-rc.0"
+# https://pnpm.io/cli/add#--save-exact--e
+saveExact: true
+savePrefix: ""
+
+# https://pnpm.io/settings/other#dedupedirectdeps
+dedupeDirectDeps: true
+
+# Keine Dependencies von Git-Repositories oder direkten URLs zu TARs
+# https://pnpm.io/settings/dependency-resolution#blockexoticsubdeps
+blockExoticSubdeps: true
+
+# Ausnahme von der Mindest-Wartezeit fuer neue Releases (Default: 1 Tag)
+# https://pnpm.io/settings/dependency-resolution#minimumreleaseage
+minimumReleaseAgeExclude: ["hono@5.0.0-rc.0"]
