@@ -1,0 +1,6 @@
+# Wie im Hono-Beispielprojekt des Profs:
+# (Binaer-) Dateien, bei denen Git nie die Zeilenenden aendern darf
+*.png binary
+*.jpg binary
+*.cer binary
+*.pem binary
