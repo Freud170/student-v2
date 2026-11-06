@@ -30,8 +30,9 @@ Rollen: `admin` und `student`.
 
 ## Schnellstart
 
-Voraussetzungen: Node ≥ 26.13 und pnpm ≥ 12.17 (ältere 26er- bzw. 12er-Versionen
-laufen mit Warnung).
+Voraussetzungen: Node ≥ 26.13 (ältere 26er-Versionen laufen mit Warnung) und
+pnpm ≥ 12.17 (ältere Versionen brechen ab, siehe `pmOnFail` in
+`pnpm-workspace.yaml`).
 
 ```powershell
 pnpm install
@@ -42,6 +43,18 @@ Der Server läuft nur mit HTTPS (HTTP/2 und TLS 1.3, zusätzlich HTTP/1.1 für B
 Zertifikat und privater Schlüssel liegen in `src/config/tls/`. Das Zertifikat ist
 selbstsigniert (Browser-Warnung in der Entwicklung bestätigen), der private Schlüssel
 liegt deshalb bewusst im Repository.
+
+## Formatierung und Codeanalyse
+
+```powershell
+pnpm run fmt          # Formatieren mit Oxfmt (fmt:check prüft nur)
+```
+
+## Entwicklung mit Git
+
+Entwickelt wird auf dem Branch `dev`; `main` erhält stabile Stände nur per Merge.
+Commit-Messages auf Englisch nach [Conventional Commits](https://www.conventionalcommits.org)
+(`feat:`, `fix:`, `docs:`, `chore:` …).
 
 ## Stand
 

@@ -5,13 +5,27 @@
   "description": "Appserver mit Hono zur Verwaltung von Studierendendaten",
   "type": "module",
   "scripts": {
-    "hello": "node --watch src/index-hello.mts"
+    "hello": "node --watch src/index-hello.mts",
+    "lint": "oxlint",
+    "lint:fix": "oxlint --fix",
+    "fmt": "oxfmt",
+    "fmt:check": "oxfmt --check"
   },
   "dependencies": {
     "@hono/node-server": "2.1.5",
     "c12": "4.0.0-rc.4",
     "hono": "5.0.0-rc.0",
     "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@stylistic/eslint-plugin": "5.10.0",
+    "@tsconfig/node-ts": "23.6.4",
+    "@tsconfig/node26": "26.0.1",
+    "@tsconfig/strictest": "2.0.8",
+    "@types/node": "26.6.6",
+    "oxfmt": "0.75.0",
+    "oxlint": "1.90.0",
+    "oxlint-tsgolint": "7.0.2005"
   },
   "devEngines": {
     "packageManager": {
