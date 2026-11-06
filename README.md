@@ -48,7 +48,11 @@ liegt deshalb bewusst im Repository.
 
 ```powershell
 pnpm run fmt          # Formatieren mit Oxfmt (fmt:check prüft nur)
+pnpm run lint         # Codeanalyse mit Oxlint (lint:fix korrigiert, was geht)
 ```
+
+Die Regeln für Oxlint (`oxlint.config.mts`) sind aus dem Beispielprojekt der Vorlesung
+übernommen; alle Kategorien sind als Fehler eingestellt, inklusive Typprüfung.
 
 ## Entwicklung mit Git
 
@@ -61,8 +65,9 @@ Commit-Messages auf Englisch nach [Conventional Commits](https://www.conventiona
 „Hello World“ mit Hono über HTTPS: `GET /` liefert `{"msg":"Hello World"}`
 (`src/index-hello.mts`). Port, TLS-Dateien und `allowHTTP1` stehen in
 `src/config/config.toml`; `src/config/config.mts` liest die Datei mit c12 ein und
-prüft sie mit Zod (bei ungültigen Werten startet der Server nicht). Nächster Schritt
-laut Fahrplan: Linting und Formatierung mit Oxlint und Oxfmt.
+prüft sie mit Zod (bei ungültigen Werten startet der Server nicht). Formatierung mit
+Oxfmt und Codeanalyse mit Oxlint sind eingerichtet. Nächster Schritt laut Fahrplan:
+statische Codeanalyse mit SonarQube.
 
 ## Team
 

@@ -1,10 +1,10 @@
 // "Hello World" als Web-Applikation mit Hono und Node, mit HTTPS (TLS).
 
-import { serve } from '@hono/node-server';
 import { Hono } from 'hono';
+import { createSecureServer } from 'node:http2';
 import { getConfig } from './config/config.mts';
 import { readFile } from 'node:fs/promises';
-import { createSecureServer } from 'node:http2';
+import { serve } from '@hono/node-server';
 
 const app = new Hono();
 
