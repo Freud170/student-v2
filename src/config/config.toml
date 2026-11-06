@@ -1,0 +1,9 @@
+# Konfiguration des Appservers. Auskommentierte Werte = Default aus config.mts
+
+[server]
+#port = 3000
+# Pfade relativ zum Projektverzeichnis, Default: src/config/tls/...
+#keyFile = "src/config/tls/key.pem"
+#certFile = "src/config/tls/certificate.crt"
+# Bruno kann nur HTTP 1.1
+allowHTTP1 = true

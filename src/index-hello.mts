@@ -2,6 +2,7 @@
 
 import { serve } from '@hono/node-server';
 import { Hono } from 'hono';
+import { getConfig } from './config/config.mts';
 import { readFile } from 'node:fs/promises';
 import { createSecureServer } from 'node:http2';
 
@@ -10,19 +11,19 @@ const app = new Hono();
 // GET-Request auf "/" liefert einen JSON-Datensatz.
 app.get('/', (c) => c.json({ msg: 'Hello World' }));
 
-// Privater Schluessel und selbstsigniertes Zertifikat fuer TLS.
-// Die Pfade sind relativ zu dieser Datei (import.meta.url).
-// Spaeter kommen Port und Pfade in die Konfiguration (config.toml).
-const key = await readFile(new URL('config/tls/key.pem', import.meta.url), { encoding: 'utf8' });
-const cert = await readFile(new URL('config/tls/certificate.crt', import.meta.url), {
-    encoding: 'utf8',
-});
+// Konfiguration aus src/config/config.toml (Destructuring)
+const config = await getConfig();
+const { port, keyFile, certFile, allowHTTP1 } = config.server;
+
+// Privater Schluessel und selbstsigniertes Zertifikat fuer TLS
+const key = await readFile(keyFile, { encoding: 'utf8' });
+const cert = await readFile(certFile, { encoding: 'utf8' });
 
 // Node-Server mit HTTP/2 und TLS 1.3 starten.
 serve(
     {
         fetch: app.fetch,
-        port: 3000,
+        port,
         createServer: createSecureServer,
         serverOptions: {
             key,
@@ -30,7 +31,7 @@ serve(
             minVersion: 'TLSv1.3',
             maxVersion: 'TLSv1.3',
             // HTTP/1.1 zusaetzlich erlauben, z.B. fuer Bruno
-            allowHTTP1: true,
+            allowHTTP1,
         },
     },
     (info) => {
