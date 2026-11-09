@@ -13,13 +13,42 @@ const MAX_PORT = 65_535;
 const DEFAULT_PORT = 3000;
 
 // Zod-Schema fuer config.toml: Struktur, erlaubte Werte und Defaults
-const ConfigSchema = z.object({
+const originSchema = z
+    .url({ protocol: /^https?$/u })
+    .pipe(
+        z
+            .string()
+            .refine(
+                (value) => new URL(value).origin === value,
+                'Origin ohne Pfad, Zugangsdaten, Query oder abschliessenden Slash angeben',
+            ),
+    );
+
+export const ConfigSchema = z.object({
     server: z.object({
         port: z.number().int().min(1).max(MAX_PORT).default(DEFAULT_PORT),
         keyFile: z.string().default(fileURLToPath(new URL('key.pem', tlsURL))),
         certFile: z.string().default(fileURLToPath(new URL('certificate.crt', tlsURL))),
         allowHTTP1: z.boolean().default(false),
     }),
+    log: z
+        .object({
+            dir: z.string().min(1).default('log'),
+            file: z.string().min(1).default('server.log'),
+            level: z
+                .enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'])
+                .default('info'),
+            output: z.enum(['console', 'file', 'both']).default('console'),
+            pretty: z.boolean().default(false),
+        })
+        .prefault({}),
+    cors: z
+        .object({
+            origins: z
+                .array(originSchema)
+                .default(['https://localhost:4200', 'https://localhost:5173']),
+        })
+        .prefault({}),
 });
 
 // TypeScript-Typ, der automatisch aus dem Zod-Schema abgeleitet wird

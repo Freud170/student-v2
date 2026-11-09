@@ -5,7 +5,12 @@
   "description": "Appserver mit Hono zur Verwaltung von Studierendendaten",
   "type": "module",
   "scripts": {
-    "hello": "node --watch src/index-hello.mts",
+    "start": "node src/index.mts",
+    "dev": "node --watch src/index.mts",
+    "hello": "node --watch src/index.mts",
+    "test": "vitest",
+    "test:run": "vitest run",
+    "typecheck": "tsc --noEmit",
     "lint": "oxlint",
     "lint:fix": "oxlint --fix",
     "fmt": "oxfmt",
@@ -16,6 +21,8 @@
     "@hono/node-server": "2.1.5",
     "c12": "4.0.0-rc.4",
     "hono": "5.0.0-rc.0",
+    "pino": "10.4.0",
+    "pino-pretty": "13.2.0",
     "zod": "4.6.7"
   },
   "devDependencies": {
@@ -26,12 +33,15 @@
     "@types/node": "26.6.6",
     "oxfmt": "0.75.0",
     "oxlint": "1.90.0",
-    "oxlint-tsgolint": "7.0.2005"
+    "oxlint-tsgolint": "7.0.2005",
+    "typescript": "7.1.0-beta",
+    "vite": "8.3.6",
+    "vitest": "5.1.0"
   },
   "devEngines": {
     "packageManager": {
       "name": "pnpm",
-      "version": "^12.17.0",
+      "version": "^12.18.0",
       "onFail": "warn"
     },
     "runtime": {
@@ -42,6 +52,6 @@
   },
   "engines": {
     "node": "^26.13.0",
-    "pnpm": "^12.17.0"
+    "pnpm": "^12.18.0"
   }
 }

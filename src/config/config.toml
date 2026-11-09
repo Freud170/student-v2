@@ -7,3 +7,16 @@
 #certFile = "src/config/tls/certificate.crt"
 # Bruno kann nur HTTP 1.1
 allowHTTP1 = true
+
+[log]
+level = "info"
+# console: Standardausgabe, file: JSON-Datei, both: beides
+output = "both"
+dir = "log"
+file = "server.log"
+# Nur die Konsolenausgabe formatieren; Logdateien bleiben JSON.
+pretty = true
+
+[cors]
+# Exakte Origins ohne abschliessenden Slash. Keine pauschale Browserfreigabe.
+origins = ["https://localhost:4200", "https://localhost:5173"]

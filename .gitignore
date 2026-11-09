@@ -1,6 +1,10 @@
 # https://git-scm.com/docs/gitignore#_pattern_format
 # Angelehnt an das Hono-Beispielprojekt des Profs
 
+# Lokale Arbeitsanweisungen und technische Abweichungsnotizen
+/AGENTS.md
+/ABWEICHUNGEN_BEISPIELPROJEKT.md
+
 # Kompilierte Dateien
 dist
 build
