@@ -54,6 +54,25 @@ pnpm run lint         # Codeanalyse mit Oxlint (lint:fix korrigiert, was geht)
 Die Regeln für Oxlint (`oxlint.config.mts`) sind aus dem Beispielprojekt der Vorlesung
 übernommen; alle Kategorien sind als Fehler eingestellt, inklusive Typprüfung.
 
+**SonarQube** läuft als Docker-Container (Daten unter `C:\Zimmermann\volumes\sonarqube`,
+Scanner unter `C:\Zimmermann\sonar-scanner`):
+
+```powershell
+cd extras\compose\sonarqube
+docker compose up       # Server unter http://localhost:9000
+```
+
+Beim ersten Start mit `admin`/`admin` einloggen und das Passwort ändern. Unter
+*My Account > Security* einen *Global Analysis Token* erzeugen und als
+Umgebungsvariable speichern (der Token gehört nicht ins Repo):
+
+```powershell
+[Environment]::SetEnvironmentVariable("SONAR_TOKEN", "<Token>", "User")
+pnpm run sonar            # in einer zweiten PowerShell, nach Neustart von Terminal bzw. VS Code
+```
+
+Das Ergebnis steht danach unter <http://localhost:9000>. Beenden mit `docker compose down`.
+
 ## Entwicklung mit Git
 
 Entwickelt wird auf dem Branch `dev`; `main` erhält stabile Stände nur per Merge.
