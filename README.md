@@ -85,8 +85,8 @@ Commit-Messages auf Englisch nach [Conventional Commits](https://www.conventiona
 (`src/index-hello.mts`). Port, TLS-Dateien und `allowHTTP1` stehen in
 `src/config/config.toml`; `src/config/config.mts` liest die Datei mit c12 ein und
 prüft sie mit Zod (bei ungültigen Werten startet der Server nicht). Formatierung mit
-Oxfmt und Codeanalyse mit Oxlint sind eingerichtet. Nächster Schritt laut Fahrplan:
-statische Codeanalyse mit SonarQube.
+Oxfmt und Codeanalyse mit Oxlint und SonarQube sind eingerichtet. Nächster Schritt laut
+Fahrplan: Abhängigkeiten prüfen (`pnpm outdated`, `pnpm audit`, OWASP Dependency Check).
 
 ## Team
 
