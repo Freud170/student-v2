@@ -70,8 +70,22 @@ keine Liste von Studierenden. Repository, Datenmodell, Schreibrouter, GraphQL un
 Keycloak-Anbindung folgen mit den jeweiligen Funktionen. `Student` bleibt das
 zentrale Aggregate mit Adresse (1:1) und Pruefungsleistungen (1:N).
 
-Unerwartete Fehler liefern eine allgemeine JSON-Antwort mit Status 500.
-Request-Middleware, CORS, Antwortzeit und Kompression folgen im naechsten Paket.
+Globale Middleware setzt Security-Header (u.a. HSTS und `nosniff`), CORS und
+Antwortkompression mit `hono/compress`. Die erlaubten Browser-Origins stehen in
+`[cors].origins` in `src/config/config.toml`; aktuell sind nur `GET` und `HEAD`
+freigegeben. Preflights erhalten Status 204. Nicht freigegebene Origins erhalten
+keinen `Access-Control-Allow-Origin`-Header; CORS ersetzt keine Authentifizierung.
+Die Hono-Optionen heissen `allowHeaders` und `exposeHeaders`.
+
+Antworten werden bei passendem `Accept-Encoding` mit gzip oder deflate komprimiert.
+`hono/compress` komprimiert keine eingehenden Request-Bodies. Die entsprechende
+Formulierung in Issue #14 ist damit noch nicht abgedeckt; fuer die spaeteren
+Schreibendpunkte muss die Behandlung komprimierter Requests festgelegt werden.
+
+`X-Response-Time` misst die Bearbeitungszeit bis zur fertigen Response, ohne die
+anschliessende Netzwerkuebertragung. Fehler und Preflights werden ebenfalls
+protokolliert. Unerwartete Fehler liefern eine allgemeine JSON-Antwort mit Status
+500; die fachlichen Fehlerfaelle aus Issue #22 folgen mit den REST-Funktionen.
 
 ## Logging
 
@@ -85,7 +99,10 @@ Pino wird ueber `[log]` in `src/config/config.toml` konfiguriert:
 | `pretty` | Lesbare Konsolenausgabe; Dateien bleiben JSON |
 
 Voreingestellt sind `info`, `both`, `log/server.log` und eine lesbare Konsole.
-Das Logverzeichnis wird bei Bedarf angelegt und ist in Git ignoriert. Der Server verwendet den Logger fuer Startmeldungen und unerwartete Fehler.
+Das Logverzeichnis wird bei Bedarf angelegt und ist in Git ignoriert. Pro Request
+werden Methode, Pfad ohne Query und Status auf `info` ausgegeben; die Antwortzeit
+wird auf `debug` protokolliert und unabhaengig vom Loglevel als Header geliefert.
+Request-Bodies, Query-Werte, Cookies und Authorization-Header werden nicht geloggt.
 
 ## Formatierung und Codeanalyse
 
@@ -96,7 +113,7 @@ pnpm run typecheck    # TypeScript-Pruefung ohne Ausgabe von Build-Dateien
 pnpm run test:run     # Vitest einmalig; pnpm test fuer den Watch-Modus
 ```
 
-Die Tests pruefen App-Komposition, Konfiguration und Pino-Ausgabe.
+Die Tests pruefen App-Komposition, Middleware, Konfiguration und Pino-Ausgabe.
 Sie verwenden keine laufenden Server und keine Datenbank-Fixtures. Die Pino-Tests
 starten eigene Node-Prozesse, pruefen deren Ausgabe und entfernen ihre temporaeren
 Logverzeichnisse unter `temp`. Tests gegen PostgreSQL/Keycloak, Bruno und Lasttests
@@ -136,7 +153,8 @@ Commit-Messages auf Englisch nach [Conventional Commits](https://www.conventiona
 ## Stand
 
 Die Hono-Anwendungsbasis mit HTTPS, Router-/Service-Trennung, manueller DI,
-Pino-Logging ist implementiert. Die HTTP-Middleware folgt im naechsten Paket. TOML wird mit c12 eingelesen und mit Zod validiert. Oxfmt, Oxlint,
+Pino-Logging, Antwortzeit, CORS, Security-Headern und Antwortkompression ist
+implementiert. TOML wird mit c12 eingelesen und mit Zod validiert. Oxfmt, Oxlint,
 eine separate Typpruefung, lokale Vitest-Tests und SonarQube-Konfiguration sind
 vorhanden.
 
