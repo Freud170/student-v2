@@ -1,18 +1,16 @@
-// "Hello World" als Web-Applikation mit Hono und Node, mit HTTPS (TLS).
+// Zusammensetzen und Starten der Anwendung mit HTTPS (TLS).
 
-import { Hono } from 'hono';
+import { createApp } from './app.mts';
+import { createContainer } from './container.mts';
 import { createSecureServer } from 'node:http2';
 import { getConfig } from './config/config.mts';
 import { readFile } from 'node:fs/promises';
 import { serve } from '@hono/node-server';
 
-const app = new Hono();
-
-// GET-Request auf "/" liefert einen JSON-Datensatz.
-app.get('/', (c) => c.json({ msg: 'Hello World' }));
-
 // Konfiguration aus src/config/config.toml (Destructuring)
 const config = await getConfig();
+const container = createContainer(config);
+const app = createApp(container);
 const { port, keyFile, certFile, allowHTTP1 } = config.server;
 
 // Privater Schluessel und selbstsigniertes Zertifikat fuer TLS
@@ -35,6 +33,6 @@ serve(
         },
     },
     (info) => {
-        console.log(`Der Server ist mit HTTPS gestartet: https://localhost:${info.port}`);
+        container.logger.info(`Der Server ist mit HTTPS gestartet: https://localhost:${info.port}`);
     },
 );

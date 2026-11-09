@@ -5,7 +5,9 @@
   "description": "Appserver mit Hono zur Verwaltung von Studierendendaten",
   "type": "module",
   "scripts": {
-    "hello": "node --watch src/index-hello.mts",
+    "start": "node src/index.mts",
+    "dev": "node --watch src/index.mts",
+    "hello": "node --watch src/index.mts",
     "test": "vitest",
     "test:run": "vitest run",
     "typecheck": "tsc --noEmit",
