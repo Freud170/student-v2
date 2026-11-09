@@ -44,13 +44,28 @@ Zertifikat und privater Schlüssel liegen in `src/config/tls/`. Das Zertifikat i
 selbstsigniert (Browser-Warnung in der Entwicklung bestätigen), der private Schlüssel
 liegt deshalb bewusst im Repository.
 
+## Logging
+
+Pino wird ueber `[log]` in `src/config/config.toml` konfiguriert:
+
+| Einstellung | Bedeutung |
+|---|---|
+| `level` | `fatal`, `error`, `warn`, `info`, `debug`, `trace` oder `silent` |
+| `output` | `console`, `file` oder `both` |
+| `dir`, `file` | Verzeichnis und Name der JSON-Logdatei; relative Pfade gelten ab dem Arbeitsverzeichnis |
+| `pretty` | Lesbare Konsolenausgabe; Dateien bleiben JSON |
+
+Voreingestellt sind `info`, `both`, `log/server.log` und eine lesbare Konsole.
+Das Logverzeichnis wird bei Bedarf angelegt und ist in Git ignoriert. Die Logger-Factory ist einschliesslich Ausgabe- und Konfigurationstests vorbereitet.
+Die Einbindung in den Server und Request-Middleware folgen in den naechsten Paketen.
+
 ## Formatierung und Codeanalyse
 
 ```powershell
 pnpm run fmt          # Formatieren mit Oxfmt (fmt:check prüft nur)
 pnpm run lint         # Codeanalyse mit Oxlint (lint:fix korrigiert, was geht)
 pnpm run typecheck    # TypeScript-Pruefung ohne Ausgabe von Build-Dateien
-pnpm run test:run     # Vitest einmalig, sobald Tests hinzugefuegt sind
+pnpm run test:run     # Konfigurations- und Logger-Tests einmalig ausfuehren
 ```
 
 Die Regeln für Oxlint (`oxlint.config.mts`) sind aus dem Beispielprojekt der Vorlesung
@@ -91,8 +106,9 @@ Commit-Messages auf Englisch nach [Conventional Commits](https://www.conventiona
 `src/config/config.toml`; `src/config/config.mts` liest die Datei mit c12 ein und
 prüft sie mit Zod (bei ungültigen Werten startet der Server nicht). Formatierung mit
 Oxfmt und Codeanalyse mit Oxlint und SonarQube sind eingerichtet. Eine separate
-Typpruefung sowie Vitest sind vorbereitet; Testfaelle folgen mit den jeweiligen
-Funktionen. Die Dependencies fuer Pino sind vorhanden. Nächster Schritt laut
+Typpruefung sowie Vitest sind eingerichtet. Die Pino-Factory und TOML-Konfiguration
+sind implementiert und lokal getestet. Die Logger-Tests verwenden eigene
+Node-Prozesse und temporaere Logs unter `temp`, ohne externe Server. Nächster Schritt laut
 Fahrplan: Abhängigkeiten prüfen (`pnpm outdated`, `pnpm audit`, OWASP Dependency Check).
 
 ## Team
