@@ -30,9 +30,9 @@ Rollen: `admin` und `student`.
 
 ## Schnellstart
 
-Voraussetzungen: Node ≥ 26.13 (ältere 26er-Versionen laufen mit Warnung) und
-pnpm ≥ 12.17 (ältere Versionen brechen ab, siehe `pmOnFail` in
-`pnpm-workspace.yaml`).
+Voraussetzungen gemäß Hono- und Drizzle-Beispiel: Node `^26.13.0` und
+pnpm `^12.18.0` (jeweils innerhalb derselben Hauptversion). Eine unpassende
+pnpm-Version führt zum Abbruch, siehe `pmOnFail` in `pnpm-workspace.yaml`.
 
 ```powershell
 pnpm install
@@ -49,6 +49,8 @@ liegt deshalb bewusst im Repository.
 ```powershell
 pnpm run fmt          # Formatieren mit Oxfmt (fmt:check prüft nur)
 pnpm run lint         # Codeanalyse mit Oxlint (lint:fix korrigiert, was geht)
+pnpm run typecheck    # TypeScript-Pruefung ohne Ausgabe von Build-Dateien
+pnpm run test:run     # Vitest einmalig, sobald Tests hinzugefuegt sind
 ```
 
 Die Regeln für Oxlint (`oxlint.config.mts`) sind aus dem Beispielprojekt der Vorlesung
@@ -75,7 +77,10 @@ Das Ergebnis steht danach unter <http://localhost:9000>. Beenden mit `docker com
 
 ## Entwicklung mit Git
 
-Entwickelt wird auf dem Branch `dev`; `main` erhält stabile Stände nur per Merge.
+Jedes Feature wird auf einem eigenen Branch von einem aktuellen `main` entwickelt.
+Die kleinen Commit-Pakete desselben Features bleiben auf diesem Branch. Erst nach
+vollstaendiger Umsetzung, Commits und erfolgreichen Pruefungen wird nach `main`
+gemergt.
 Commit-Messages auf Englisch nach [Conventional Commits](https://www.conventionalcommits.org)
 (`feat:`, `fix:`, `docs:`, `chore:` …).
 
@@ -85,7 +90,9 @@ Commit-Messages auf Englisch nach [Conventional Commits](https://www.conventiona
 (`src/index-hello.mts`). Port, TLS-Dateien und `allowHTTP1` stehen in
 `src/config/config.toml`; `src/config/config.mts` liest die Datei mit c12 ein und
 prüft sie mit Zod (bei ungültigen Werten startet der Server nicht). Formatierung mit
-Oxfmt und Codeanalyse mit Oxlint und SonarQube sind eingerichtet. Nächster Schritt laut
+Oxfmt und Codeanalyse mit Oxlint und SonarQube sind eingerichtet. Eine separate
+Typpruefung sowie Vitest sind vorbereitet; Testfaelle folgen mit den jeweiligen
+Funktionen. Die Dependencies fuer Pino sind vorhanden. Nächster Schritt laut
 Fahrplan: Abhängigkeiten prüfen (`pnpm outdated`, `pnpm audit`, OWASP Dependency Check).
 
 ## Team

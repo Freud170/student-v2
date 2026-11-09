@@ -10,6 +10,10 @@ pmOnFail: error
 saveExact: true
 savePrefix: ""
 
+# Vite/Vitest benoetigen den nativen esbuild-Build wie im Hono-Beispiel.
+allowBuilds:
+  esbuild: true
+
 # https://pnpm.io/settings/other#dedupedirectdeps
 dedupeDirectDeps: true
 
