@@ -161,6 +161,12 @@ gespeichert wird und nicht ins Repo gehört:
 Bewusst ignorierte Fehlalarme stehen mit Begründung in
 `scripts/dependency-check-suppression.xml`.
 
+Die Warnung „No lock file exists … run `npm install --package-lock`“ kann ignoriert
+werden: Sie kommt vom Node Package Analyzer, der nur `package-lock.json` von npm
+liest. Unser `pnpm-lock.yaml` wertet der Pnpm Audit Analyzer aus. Dafür übergibt das
+Skript den Pfad zu `pnpm.cmd` aus `PNPM_HOME`, weil Dependency Check pnpm unter
+Windows nicht selbst findet.
+
 ## Entwicklung mit Git
 
 Jedes Feature wird auf einem eigenen Branch von einem aktuellen `main` entwickelt.
@@ -176,12 +182,11 @@ Die Hono-Anwendungsbasis mit HTTPS, Router-/Service-Trennung, manueller DI,
 Pino-Logging, Antwortzeit, CORS, Security-Headern und Antwortkompression ist
 implementiert. TOML wird mit c12 eingelesen und mit Zod validiert. Oxfmt, Oxlint,
 eine separate Typpruefung, lokale Vitest-Tests und SonarQube-Konfiguration sind
-vorhanden.
+vorhanden. Die Abhaengigkeiten sind aktuell und geprueft: `pnpm audit --prod` und
+OWASP Dependency Check melden keine Sicherheitsluecken.
 
 Als naechstes folgt die lesende Studierenden-API mit dem bestehenden Datenmodell
-und Drizzle an unserer vorhandenen PostgreSQL-Instanz. Die Abhaengigkeitspruefung
-mit `pnpm outdated`, `pnpm audit` und OWASP Dependency Check bleibt offen. Die
-lokalen Tests bilden nur den ersten Teil von Issue #25 ab; Integrationstests mit
+und Drizzle an unserer vorhandenen PostgreSQL-Instanz. Die lokalen Tests bilden nur den ersten Teil von Issue #25 ab; Integrationstests mit
 der vorgesehenen Datenbank-/Keycloak-Testumgebung folgen spaeter.
 
 ## Team
