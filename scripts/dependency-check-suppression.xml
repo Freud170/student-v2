@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Bewusst ignorierte Fehlalarme fuer OWASP Dependency Check (jeweils mit Begruendung) -->
+<!-- https://dependency-check.github.io/DependencyCheck/general/suppression.html -->
+
+<suppressions xmlns="https://jeremylong.github.io/DependencyCheck/dependency-suppression.1.4.xsd">
+</suppressions>
