@@ -24,3 +24,6 @@ blockExoticSubdeps: true
 # Ausnahme von der Mindest-Wartezeit fuer neue Releases (Default: 1 Tag)
 # https://pnpm.io/settings/dependency-resolution#minimumreleaseage
 minimumReleaseAgeExclude: ["hono@5.0.0-rc.0"]
+
+lockfile:
+  format: v13
