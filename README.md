@@ -141,6 +141,26 @@ pnpm run sonar            # in einer zweiten PowerShell, nach Neustart von Termi
 
 Das Ergebnis steht danach unter <http://localhost:9000>. Beenden mit `docker compose down`.
 
+## Abhängigkeiten und Sicherheitslücken
+
+```powershell
+pnpm outdated              # neuere Versionen der Pakete aus package.json
+pnpm audit --prod          # Sicherheitslücken in den dependencies (ohne devDependencies)
+pnpm run dependency-check  # OWASP Dependency Check, Ergebnis in dependency-check-report.html
+```
+
+OWASP Dependency Check liegt unter `C:\Zimmermann\dependency-check` und gleicht die
+Pakete mit der CVE-Datenbank der NIST ab. Dafür braucht man einen eigenen API-Key
+(<https://nvd.nist.gov/developers/request-an-api-key>), der als Umgebungsvariable
+gespeichert wird und nicht ins Repo gehört:
+
+```powershell
+[Environment]::SetEnvironmentVariable("NVD_API_KEY", "<Key>", "User")
+```
+
+Bewusst ignorierte Fehlalarme stehen mit Begründung in
+`scripts/dependency-check-suppression.xml`.
+
 ## Entwicklung mit Git
 
 Jedes Feature wird auf einem eigenen Branch von einem aktuellen `main` entwickelt.

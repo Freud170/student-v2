@@ -15,7 +15,8 @@
     "lint:fix": "oxlint --fix",
     "fmt": "oxfmt",
     "fmt:check": "oxfmt --check",
-    "sonar": "node scripts/sonar-scanner.mts"
+    "sonar": "node scripts/sonar-scanner.mts",
+    "dependency-check": "node scripts/dependency-check.mts"
   },
   "dependencies": {
     "@hono/node-server": "2.1.6",
