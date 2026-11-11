@@ -73,8 +73,17 @@ hoechstens eine pro Student; die Existenz einer Adresse erzwingt er nicht.
 
 Das Skript wird nicht beim App-Start ausgefuehrt. `IF NOT EXISTS` legt fehlende
 Tabellen und Indizes an, gleicht aber bestehende Definitionen nicht ab und ersetzt
-keine Migration. CSV-Testdaten, Import und wiederholbares Neuladen folgen noch;
-die Ausfuehrung gegen die vorgesehene Testdatenbank ist noch nicht geprueft.
+keine Migration.
+
+Unter `extras/compose/postgres/init/student/csv` liegen 5 Studierende,
+5 Adressen und 6 Pruefungsleistungen als CSV-Testdaten. `sql/copy-csv.sql` im
+benachbarten SQL-Verzeichnis importiert sie in dieser Reihenfolge mit expliziten
+Spaltenlisten. Die festen IDs liegen unter 1000 und kollidieren deshalb nicht
+mit den ab 1000 generierten IDs. Der Import setzt leere Tabellen voraus und wird
+mit Fehlerabbruch in einer gemeinsamen Transaktion ausgefuehrt; die Befehle
+stehen in der PostgreSQL-Anleitung. Er legt keine Keycloak-Benutzer an.
+Die Ausfuehrung gegen die Testdatenbank und der Ablauf zum wiederholbaren Neuladen
+sind noch nicht geprueft bzw. umgesetzt.
 
 ## Anwendungsbasis
 
@@ -221,9 +230,9 @@ Oxfmt, Oxlint, eine separate Typpruefung, lokale Vitest-Tests und SonarQube-Konf
 vorhanden. Die Abhaengigkeiten sind aktuell und geprueft: `pnpm audit --prod` und
 OWASP Dependency Check melden keine Sicherheitsluecken.
 
-Die SQL-Definitionen fuer das Studierendenmodell liegen vor. Als naechstes folgen
-CSV-Testdaten und ein gepruefter Ablauf zum Neuladen der Testdatenbank (#18), danach
-die Drizzle-Anbindung (#19) und die lesende Studierenden-API (#20).
+Die SQL-Definitionen, CSV-Testdaten und das Importskript fuer das Studierendenmodell
+liegen vor. Als naechstes folgt ein gepruefter Ablauf zum Neuladen der Testdatenbank
+(#18), danach die Drizzle-Anbindung (#19) und die lesende Studierenden-API (#20).
 Die lokalen Tests bilden nur den ersten Teil von Issue #25 ab; Integrationstests
 mit der vorgesehenen Datenbank-/Keycloak-Testumgebung folgen spaeter.
 
