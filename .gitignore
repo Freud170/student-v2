@@ -23,8 +23,8 @@ dependency-check-report.html
 .env
 # src/config/tls/key.pem ist bewusst im Repo (selbstsigniert, nur fuer die Entwicklung)
 extras/compose/keycloak/tls/key.pem
-extras/compose/postgres/password.txt
-extras/compose/postgres/init/tls/server.key
+# extras/compose/postgres/password.txt und init/tls/server.key sind bewusst im Repo
+# (Entwicklungspasswort "p" bzw. selbstsigniert, nur fuer die Entwicklung)
 # sonar-project.properties ist im Repo (ohne Token, der kommt aus SONAR_TOKEN)
 
 # Logs

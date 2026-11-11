@@ -50,6 +50,20 @@ Zertifikat und privater Schlüssel liegen in `src/config/tls/`. Das Zertifikat i
 selbstsigniert (Browser-Warnung in der Entwicklung bestätigen), der private Schlüssel
 liegt deshalb bewusst im Repository.
 
+## Datenbank
+
+PostgreSQL 19rc1 läuft als Docker-Container mit TLS (Datenbank, DB-User und Schema
+`student`, eigene Volumes `*_student_v2`). Die einmalige Einrichtung steht in
+[extras/compose/postgres/ReadMe.md](extras/compose/postgres/ReadMe.md), danach:
+
+```powershell
+cd extras\compose\postgres
+docker compose up -d      # starten; beenden mit docker compose down
+```
+
+Die Anwendung greift noch nicht auf die Datenbank zu; Tabellen und Testdaten folgen
+mit dem Datenmodell.
+
 ## Anwendungsbasis
 
 `src/index.mts` liest die Konfiguration, erzeugt einmal den DI-Container und startet
