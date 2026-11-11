@@ -77,8 +77,11 @@ docker compose exec postgres psql --dbname=student --username=student --file=/in
 ```
 
 Angelegt werden der DB-User `student`, die Datenbank `student`, der Tablespace
-`studentspace` und das Schema `student`. Tabellen und Testdaten folgen mit dem
-Datenmodell.
+`studentspace` und das Schema `student`. Die Tabellendefinitionen liegen in
+`init/student/sql/create-table.sql`; die obigen Befehle fuehren sie noch nicht aus.
+Das Skript setzt Schema und Tablespace voraus und legt fehlende Tabellen und
+Indizes an. Bestehende Tabellendefinitionen werden nicht migriert. CSV-Testdaten,
+Import und der gepruefte Ablauf zum Neuladen der Testdatenbank folgen noch.
 
 ## Betrieb
 

@@ -60,8 +60,21 @@ cd extras\compose\postgres
 docker compose up -d      # starten; beenden mit docker compose down
 ```
 
-Die Anwendung greift noch nicht auf die Datenbank zu; Tabellen und Testdaten folgen
-mit dem Datenmodell.
+Die Anwendung greift noch nicht auf die Datenbank zu. Die Tabellendefinitionen
+liegen in `extras/compose/postgres/init/student/sql/create-table.sql` und setzen
+das eingerichtete Schema `student` sowie den Tablespace `studentspace` voraus.
+Das Skript legt die Tabellen `student`, `adresse` und `pruefungsleistung` mit
+Constraints und Indizes an. IDs werden ab 1000 generiert; die Version beginnt
+bei 0. Matrikelnummer und E-Mail sind eindeutig, Matrikelnummer und PLZ werden
+auf ihr Ziffernformat geprueft, Noten auf die zulaessigen Notenstufen.
+Die Fremdschluessel loeschen Adresse und Pruefungsleistungen beim Loeschen eines
+Studierenden mit. Ein eindeutiger Fremdschluessel begrenzt die Adresse auf
+hoechstens eine pro Student; die Existenz einer Adresse erzwingt er nicht.
+
+Das Skript wird nicht beim App-Start ausgefuehrt. `IF NOT EXISTS` legt fehlende
+Tabellen und Indizes an, gleicht aber bestehende Definitionen nicht ab und ersetzt
+keine Migration. CSV-Testdaten, Import und wiederholbares Neuladen folgen noch;
+die Ausfuehrung gegen die vorgesehene Testdatenbank ist noch nicht geprueft.
 
 ## Anwendungsbasis
 
@@ -208,9 +221,11 @@ Oxfmt, Oxlint, eine separate Typpruefung, lokale Vitest-Tests und SonarQube-Konf
 vorhanden. Die Abhaengigkeiten sind aktuell und geprueft: `pnpm audit --prod` und
 OWASP Dependency Check melden keine Sicherheitsluecken.
 
-Als naechstes folgt die lesende Studierenden-API mit dem bestehenden Datenmodell
-und Drizzle an unserer vorhandenen PostgreSQL-Instanz. Die lokalen Tests bilden nur den ersten Teil von Issue #25 ab; Integrationstests mit
-der vorgesehenen Datenbank-/Keycloak-Testumgebung folgen spaeter.
+Die SQL-Definitionen fuer das Studierendenmodell liegen vor. Als naechstes folgen
+CSV-Testdaten und ein gepruefter Ablauf zum Neuladen der Testdatenbank (#18), danach
+die Drizzle-Anbindung (#19) und die lesende Studierenden-API (#20).
+Die lokalen Tests bilden nur den ersten Teil von Issue #25 ab; Integrationstests
+mit der vorgesehenen Datenbank-/Keycloak-Testumgebung folgen spaeter.
 
 ## Team
 
