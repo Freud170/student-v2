@@ -2,6 +2,7 @@ import { type Container } from './container.mts';
 import { Hono } from 'hono';
 import { compress } from 'hono/compress';
 import { cors } from 'hono/cors';
+import { createHealthRouter } from './admin/health-router.mts';
 import { createRootRouter } from './root-router.mts';
 import { createStudentRouter } from './student/router/student-router.mts';
 import { getCorsOptions } from './config/cors-options.mts';
@@ -20,6 +21,7 @@ export const createApp = ({ config, logger, studentService }: Container): Hono =
 
     app.route('/', createRootRouter());
     app.route('/rest', createStudentRouter(studentService));
+    app.route('/health', createHealthRouter());
 
     app.notFound((c) => c.json({ msg: 'Nicht gefunden' }, 404));
     // Hono erwartet hier einen Fehler-Callback.

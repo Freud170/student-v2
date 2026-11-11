@@ -385,6 +385,13 @@ export default defineConfig({
 
     overrides: [
         {
+            files: ['src/app.mts'],
+            rules: {
+                // Die App setzt Router und Middleware zentral zusammen, jetzt auch Health.
+                'import/max-dependencies': ['error', { max: 11 }],
+            },
+        },
+        {
             files: ['src/**/*.test.mts', 'test/integration/*/*.test.mts'],
 
             plugins: ['vitest', 'import'],

@@ -49,6 +49,38 @@ describe('App und manuelle DI', () => {
     });
 });
 
+describe('Health-Endpunkte', () => {
+    test.each(['/health/liveness', '/health/readiness'])(
+        'GET %s liefert den Anwendungsstatus als JSON',
+        async (path) => {
+            const { app, lines } = setup();
+            const response = await app.request(path);
+
+            expect(response.status).toBe(200);
+            expect(response.headers.get('Content-Type')).toContain('application/json');
+            await expect(response.json()).resolves.toStrictEqual({ status: 'up' });
+            expect(response.headers.get('Strict-Transport-Security')).toContain('max-age=');
+            expect(response.headers.get('X-Content-Type-Options')).toBe('nosniff');
+            expect(response.headers.get('X-Response-Time')).toMatch(/^\d+\.\d{3}ms$/u);
+            expect(lines.map((line): unknown => JSON.parse(line))).toContainEqual(
+                expect.objectContaining({ method: 'GET', path, status: 200, msg: 'HTTP request' }),
+            );
+        },
+    );
+
+    test.each(['/health/liveness', '/health/readiness'])(
+        'HEAD %s liefert Status und JSON-Header ohne Body',
+        async (path) => {
+            const { app } = setup();
+            const response = await app.request(path, { method: 'HEAD' });
+
+            expect(response.status).toBe(200);
+            expect(response.headers.get('Content-Type')).toContain('application/json');
+            await expect(response.text()).resolves.toBe('');
+        },
+    );
+});
+
 // Die Faelle pruefen die gemeinsame Middleware-Kette einschliesslich Kurzschluessen.
 describe('HTTP-Middleware', () => {
     test.each([

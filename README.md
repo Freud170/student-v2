@@ -3,9 +3,8 @@
 Appserver mit Hono zur Verwaltung von Studierendendaten (Aufgabe 3 im Modul
 Software Engineering, Hochschule Karlsruhe).
 
-Fachlich entspricht das Projekt unserer Aufgabe 1 (`student`, FastAPI), technisch
-orientiert es sich am Hono-Beispielprojekt „buch“ aus der Vorlesung. Wir gehen nach dessen
-`VORGEHENSWEISE.md` schrittweise vor.
+Fachlich entspricht das Projekt unserer Aufgabe 1 (`student`, FastAPI).
+Die Umsetzung verwendet TypeScript, Hono und Drizzle.
 
 ## Überblick (geplant)
 
@@ -30,7 +29,7 @@ Rollen: `admin` und `student`.
 
 ## Schnellstart
 
-Voraussetzungen gemäß Hono- und Drizzle-Beispiel: Node `^26.13.0` und
+Voraussetzungen: Node `^26.13.0` und
 pnpm `^12.18.0` (jeweils innerhalb derselben Hauptversion). Eine unpassende
 pnpm-Version führt zum Abbruch, siehe `pmOnFail` in `pnpm-workspace.yaml`.
 
@@ -76,13 +75,22 @@ werden explizit an die Router und Services uebergeben.
 |---|---|
 | `GET /` | Bestehendes `{"msg":"Hello World"}` |
 | `GET /rest` | `{"msg":"Hello Student"}` aus dem injizierten Student-Service |
+| `GET /health/liveness` | Status 200 mit `{"status":"up"}` |
+| `GET /health/readiness` | Status 200 mit `{"status":"up"}`, noch ohne DB-Pruefung |
 | `HEAD /`, `HEAD /rest` | Dieselben Statuscodes und Header, ohne Response-Body |
+| `HEAD /health/liveness`, `HEAD /health/readiness` | Status 200 und JSON-Content-Type, ohne Response-Body |
 | Unbekannte Route | JSON mit Status 404 |
 
 `/rest` ist der Einstieg fuer die spaetere Studierenden-API, noch keine Suche und
 keine Liste von Studierenden. Repository, Datenmodell, Schreibrouter, GraphQL und
 Keycloak-Anbindung folgen mit den jeweiligen Funktionen. `Student` bleibt das
 zentrale Aggregate mit Adresse (1:1) und Pruefungsleistungen (1:N).
+
+Die Health-Endpunkte liegen in einem eigenen Router unter `src/admin/` und
+durchlaufen dieselbe globale Middleware wie die anderen Routen. Liveness zeigt,
+dass die Anwendung Requests beantworten kann. Readiness liefert
+vorerst ebenfalls einen festen Status `up`; PostgreSQL und Keycloak
+werden dabei nicht geprueft. Eine DB-Pruefung folgt mit der Drizzle-Anbindung.
 
 Globale Middleware setzt Security-Header (u.a. HSTS und `nosniff`), CORS und
 Antwortkompression mit `hono/compress`. Die erlaubten Browser-Origins stehen in
@@ -127,14 +135,14 @@ pnpm run typecheck    # TypeScript-Pruefung ohne Ausgabe von Build-Dateien
 pnpm run test:run     # Vitest einmalig; pnpm test fuer den Watch-Modus
 ```
 
-Die Tests pruefen App-Komposition, Middleware, Konfiguration und Pino-Ausgabe.
+Die Tests pruefen App-Komposition, Health-Endpunkte, Middleware, Konfiguration und Pino-Ausgabe.
 Sie verwenden keine laufenden Server und keine Datenbank-Fixtures. Die Pino-Tests
 starten eigene Node-Prozesse, pruefen deren Ausgabe und entfernen ihre temporaeren
 Logverzeichnisse unter `temp`. Tests gegen PostgreSQL/Keycloak, Bruno und Lasttests
 sind noch nicht eingerichtet.
 
-Die Regeln für Oxlint (`oxlint.config.mts`) sind aus dem Beispielprojekt der Vorlesung
-übernommen; alle Kategorien sind als Fehler eingestellt, inklusive Typprüfung.
+Die Regeln für Oxlint stehen in `oxlint.config.mts`; alle Kategorien sind als
+Fehler eingestellt, inklusive Typprüfung.
 
 **SonarQube** läuft als Docker-Container (Daten unter `C:\Zimmermann\volumes\sonarqube`,
 Scanner unter `C:\Zimmermann\sonar-scanner`):
@@ -194,8 +202,9 @@ Commit-Messages auf Englisch nach [Conventional Commits](https://www.conventiona
 
 Die Hono-Anwendungsbasis mit HTTPS, Router-/Service-Trennung, manueller DI,
 Pino-Logging, Antwortzeit, CORS, Security-Headern und Antwortkompression ist
-implementiert. TOML wird mit c12 eingelesen und mit Zod validiert. Oxfmt, Oxlint,
-eine separate Typpruefung, lokale Vitest-Tests und SonarQube-Konfiguration sind
+implementiert. TOML wird mit c12 eingelesen und mit Zod validiert.
+Liveness und Readiness sind vorhanden, derzeit ohne Pruefung externer Dienste.
+Oxfmt, Oxlint, eine separate Typpruefung, lokale Vitest-Tests und SonarQube-Konfiguration sind
 vorhanden. Die Abhaengigkeiten sind aktuell und geprueft: `pnpm audit --prod` und
 OWASP Dependency Check melden keine Sicherheitsluecken.
 
