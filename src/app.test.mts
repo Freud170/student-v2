@@ -12,7 +12,11 @@ const setup = (level = 'debug') => {
     const lines: string[] = [];
     const logger = pino({ level }, { write: (line) => lines.push(line) });
     const config = ConfigSchema.parse({ server: {}, cors: { origins: [origin] } });
-    const database = { db: drizzle.mock({ relations }), close: vi.fn<() => Promise<void>>() };
+    const database = {
+        db: drizzle.mock({ relations }),
+        close: vi.fn<() => Promise<void>>(),
+        check: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
+    };
     const container = createContainer(config, database, logger);
     return { app: createApp(container), container, lines };
 };
@@ -219,6 +223,40 @@ describe('Kompression', () => {
 
         expect(response.status).toBe(200);
         expect(response.headers.get('Content-Encoding')).toBeNull();
+        await expect(response.text()).resolves.toBe('');
+    });
+});
+
+describe('DB-Readiness und unabhaengige Liveness', () => {
+    test('Liveness benoetigt keine Datenbankabfrage', async () => {
+        const { app, container } = setup();
+        const response = await app.request('/health/liveness');
+        expect(response.status).toBe(200);
+        expect(container.database.check).not.toHaveBeenCalled();
+    });
+
+    test('DB-Ausfall liefert 503 ohne interne Fehlerdetails und erholt sich beim naechsten Aufruf', async () => {
+        const { app, container, lines } = setup();
+        vi.mocked(container.database.check).mockRejectedValueOnce(new Error('db-secret'));
+        const down = await app.request('/health/readiness');
+        const unavailable = 503;
+        expect(down.status).toBe(unavailable);
+        await expect(down.json()).resolves.toStrictEqual({ status: 'down' });
+        expect(down.headers.get('X-Content-Type-Options')).toBe('nosniff');
+        expect(lines.join('')).not.toContain('db-secret');
+        const up = await app.request('/health/readiness');
+        expect(up.status).toBe(200);
+        await expect(up.json()).resolves.toStrictEqual({ status: 'up' });
+        const checks = 2;
+        expect(container.database.check).toHaveBeenCalledTimes(checks);
+    });
+
+    test('HEAD meldet DB-Ausfall ohne Response-Body', async () => {
+        const { app, container } = setup();
+        vi.mocked(container.database.check).mockRejectedValueOnce(new Error('DB nicht erreichbar'));
+        const response = await app.request('/health/readiness', { method: 'HEAD' });
+        const unavailable = 503;
+        expect(response.status).toBe(unavailable);
         await expect(response.text()).resolves.toBe('');
     });
 });

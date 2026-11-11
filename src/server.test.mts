@@ -36,6 +36,7 @@ const setup = (listenError = false) => {
     );
     const database = {
         db: drizzle.mock({ relations }),
+        check: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
         close: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
     };
     const container = createContainer(

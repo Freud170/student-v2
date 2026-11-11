@@ -43,8 +43,8 @@ pnpm run dev       # HTTPS unter https://localhost:3000 mit Watch-Modus
 muss Port 3000 frei sein, insbesondere darf dort nicht bereits die Anwendung aus
 der ersten Abgabe laufen. Beim Start werden die DB-Passwortdatei und das
 oeffentliche DB-Zertifikat aus `[db]` gelesen und der Verbindungspool erzeugt.
-Verbindungen entstehen erst bei einer DB-Abfrage; die bisherigen Greeting- und
-Health-Routen fuehren noch keine solche Abfrage aus. Keycloak wird noch nicht
+Verbindungen entstehen erst bei einer DB-Abfrage, beispielsweise durch Readiness.
+Greeting und Liveness benoetigen keine DB-Verbindung. Keycloak wird noch nicht
 benoetigt; der Start laedt keine Daten oder Benutzer nach.
 
 Der Server läuft nur mit HTTPS (HTTP/2 und TLS 1.3, zusätzlich HTTP/1.1 für Bruno).
@@ -63,8 +63,8 @@ cd extras\compose\postgres
 docker compose up -d      # starten; beenden mit docker compose down
 ```
 
-Die Anwendung stellt einen Drizzle-Client im DI-Container bereit; ihre Routen
-greifen noch nicht auf die Datenbank zu. Die Tabellendefinitionen
+Die Anwendung stellt einen Drizzle-Client im DI-Container bereit; Readiness
+prueft damit die Datenbankverbindung. Die Tabellendefinitionen
 liegen in `extras/compose/postgres/init/student/sql/create-table.sql` und setzen
 das eingerichtete Schema `student` sowie den Tablespace `studentspace` voraus.
 Das Skript legt die Tabellen `student`, `adresse` und `pruefungsleistung` mit
@@ -147,9 +147,8 @@ Geprueft sind Schema-Uebereinstimmung und lesende Drizzle-Abfragen ueber TLS 1.3
 5 Studierende, 5 Adressen, 6 Pruefungsleistungen, Beziehungen in beiden Richtungen,
 Studierende ohne/mit mehreren Leistungen sowie die String-/Date-Abbildung.
 Das war eine manuelle Integrationspruefung; Vitest bleibt ohne Datenbankzugriff.
-Der Drizzle-Client der Anwendung verwendet dieses Mapping. Ein Repository liest
-bereits vollstaendige Aggregate per ID; flexible Suche und DB-Readiness folgen
-im weiteren Paket von #19.
+Der Drizzle-Client der Anwendung verwendet dieses Mapping. Das Repository liest
+vollstaendige Aggregate per ID oder mit kombinierbaren Suchfiltern.
 
 ### DB-Konfiguration und Verbindungspool
 
@@ -167,8 +166,11 @@ Das Importieren der Module erzeugt keine Verbindung.
 | `poolMax` | 5 Verbindungen, erlaubt: 1 bis 100 |
 | `poolIdleTimeoutMillis` | 30000 ms; unbenutzte Verbindungen freigeben |
 | `poolConnectionTimeoutMillis` | 5000 ms; Verbindungsaufbau begrenzen |
+| `queryTimeoutMillis` | 5000 ms; clientseitige Wartezeit auf Abfragen begrenzen |
 
-Beide Timeouts muessen zwischen 1 und 60000 ms liegen. Explizite relative
+Alle drei Timeouts muessen zwischen 1 und 60000 ms liegen. Pool-Wartezeit bzw.
+Verbindungsaufbau und anschliessende Abfrage haben getrennte Zeitgrenzen;
+ihre Dauer kann sich addieren. Explizite relative
 Dateipfade gelten ab dem Projektverzeichnis. Ohne Pfadangabe werden die
 entsprechenden Dateien relativ zum Konfigurationsmodul aufgeloest.
 Fehlende Dateien oder eine leere Passwortdatei verhindern den Start.
@@ -201,12 +203,30 @@ Pruefungsleistungen sind aufsteigend nach ID geordnet. Die Abfrage verwendet
 kein LIMIT auf Join-Zeilen, damit mehrere Leistungen vollstaendig bleiben.
 Noten bleiben dezimale Strings, Zeitstempel `Date`-Werte.
 
-Der DI-Container stellt eine gemeinsame `studentRepository`-Instanz bereit.
-Service und REST-Routen verwenden sie noch nicht. Geprueft wurden alle fuenf
-Teststudierenden mit null, einer und zwei Leistungen sowie eine unbekannte ID
-in einer lesenden Transaktion ueber TLS 1.3. Die Pruefsummen aller drei Tabellen
-waren vor und nach der Pruefung identisch. Der Fall einer fehlenden Adresse
-ist durch einen lokalen Test mit simulierten Treiberzeilen abgedeckt.
+`StudentRepository.find(params)` verwendet dieselben Fetch-Joins und verbindet
+alle angegebenen Filter mit AND. Ohne Filter liefert die Suche alle Studierenden,
+bei fehlenden Treffern ein leeres Array. Studierende und Leistungen sind jeweils
+nach ID geordnet. Pagination ist noch nicht eingerichtet.
+
+| Suchparameter | Vergleich |
+|---|---|
+| `nachname`, `vorname`, `ort` | Teiltext ohne Unterscheidung von Gross-/Kleinschreibung |
+| `matrikelnummer` | Exakt, sechs Ziffern |
+| `email` | Exakt, einschliesslich Gross-/Kleinschreibung |
+| `plz` | Exakt, fuenf Ziffern |
+
+Alle Werte werden als SQL-Parameter gebunden; `%`, `_` und Backslashes gelten
+auch bei Teiltextsuche als woertliche Zeichen. Der DI-Container injiziert die
+gemeinsame Repository-Instanz in `StudentService`. Dessen `find` validiert mit Zod,
+entfernt umgebende Leerzeichen und weist leere Werte sowie unbekannte Parameter
+ab. `findById` akzeptiert positive Ganzzahlen im PostgreSQL-Integerbereich.
+Suchwerte werden nicht geloggt; DB-Fehler werden weitergegeben.
+
+Manuell gegen PostgreSQL ueber TLS 1.3 geprueft: alle fuenf Teststudierenden mit
+null, einer und zwei Leistungen, unbekannte ID, alle sechs Filter, AND-Kombinationen,
+woertliche Sonderzeichen und fehlende Treffer. Die Pruefsummen aller drei Tabellen
+waren vor und nach der Pruefung identisch. Fehlende Adressen sind durch lokale
+Tests mit simulierten Treiberzeilen abgedeckt.
 
 `src/index.mts` liest die Konfiguration, erzeugt einmal den DI-Container und startet
 den HTTPS-Server. `src/app.mts` setzt die Router und Middleware zusammen und kann
@@ -220,21 +240,25 @@ werden explizit an die Router und Services uebergeben.
 | `GET /` | Bestehendes `{"msg":"Hello World"}` |
 | `GET /rest` | `{"msg":"Hello Student"}` aus dem injizierten Student-Service |
 | `GET /health/liveness` | Status 200 mit `{"status":"up"}` |
-| `GET /health/readiness` | Status 200 mit `{"status":"up"}`, noch ohne DB-Pruefung |
+| `GET /health/readiness` | `SELECT 1` erfolgreich: 200 mit `{"status":"up"}`; DB-Fehler: 503 mit `{"status":"down"}` |
 | `HEAD /`, `HEAD /rest` | Dieselben Statuscodes und Header, ohne Response-Body |
-| `HEAD /health/liveness`, `HEAD /health/readiness` | Status 200 und JSON-Content-Type, ohne Response-Body |
+| `HEAD /health/liveness`, `HEAD /health/readiness` | Dieselbe Pruefung und derselbe Status wie GET, ohne Response-Body |
 | Unbekannte Route | JSON mit Status 404 |
 
 `/rest` ist der Einstieg fuer die spaetere Studierenden-API, noch keine Suche und
-keine Liste von Studierenden. Service-Anbindung, Schreibrouter, GraphQL und
+keine Liste von Studierenden. Lesende REST-Routen (#20), Schreibrouter, GraphQL und
 Keycloak-Anbindung folgen mit den jeweiligen Funktionen. `Student` bleibt das
 zentrale Aggregate mit Adresse (1:1) und Pruefungsleistungen (1:N).
 
 Die Health-Endpunkte liegen in einem eigenen Router unter `src/admin/` und
 durchlaufen dieselbe globale Middleware wie die anderen Routen. Liveness zeigt,
-dass die Anwendung Requests beantworten kann. Readiness liefert
-vorerst ebenfalls einen festen Status `up`; PostgreSQL und Keycloak
-werden dabei nicht geprueft. Eine DB-Pruefung folgt mit der Drizzle-Anbindung.
+dass die Anwendung Requests unabhaengig von der Datenbank beantworten kann.
+Readiness fuehrt bei jedem Aufruf `SELECT 1` ueber denselben Pool wie das Repository
+aus. Bei einem Fehler werden keine internen DB-Details ausgegeben oder geloggt;
+der naechste Aufruf prueft erneut. Geprueft wird die Datenbankverbindung, nicht
+der Zustand des Schemas oder Keycloak. Erreichbare DB, geschlossener Pool und
+unabhaengige Liveness wurden manuell geprueft; ebenso Abfrage-Timeout und
+anschliessende Wiederverwendbarkeit des Pools.
 
 Globale Middleware setzt Security-Header (u.a. HSTS und `nosniff`), CORS und
 Antwortkompression mit `hono/compress`. Die erlaubten Browser-Origins stehen in
@@ -280,14 +304,16 @@ pnpm run test:run     # Vitest einmalig; pnpm test fuer den Watch-Modus
 ```
 
 Die Tests pruefen App-Komposition, Health-Endpunkte, Middleware, Konfiguration,
-Pino-Ausgabe sowie DB-Pool-Konfiguration, Server-Lebenszyklus und Repository.
+Pino-Ausgabe sowie DB-Pool-Konfiguration, Server-Lebenszyklus, Service und Repository.
 Sie verwenden keine laufenden Server und keine Datenbank-Fixtures. Die Pino-Tests
 starten eigene Node-Prozesse, pruefen deren Ausgabe und entfernen ihre temporaeren
 Logverzeichnisse unter `temp`. Pool- und Server-Lebenszyklustests simulieren
 externe Ressourcen; sie oeffnen weder einen DB-Zugang noch einen HTTP-Port.
 Die Repository-Tests ersetzen nur den PostgreSQL-Treiber; SQL-Erzeugung und
 Ergebnisabbildung laufen mit Drizzle. Sie pruefen Aggregate, Parametrisierung,
-LEFT JOINs ohne LIMIT und die Weitergabe von DB-Fehlern.
+LEFT JOINs ohne LIMIT, alle Suchfilter und die Weitergabe von DB-Fehlern.
+Service-Tests pruefen Validierung vor dem DB-Zugriff; Health-Tests pruefen
+DB-Ausfall und Erholung sowie die unabhaengige Liveness.
 Automatisierte Tests gegen PostgreSQL/Keycloak, Bruno und Lasttests
 sind noch nicht eingerichtet.
 
@@ -341,7 +367,7 @@ Entwicklungsabhaengigkeit; die Elternpakete verlangen noch Version 10.
 Da dies deren Versionsbereich ueberschreitet, wurden rekursive Dateisuche,
 Brace-/Extglob-Muster, partielle Pfadtreffer, Ignore-Muster und die
 Regelausfuehrung mit ESLint gesondert geprueft. Alle vier Projektchecks bestehen
-mit 37 Tests; `pnpm audit` und `pnpm audit --prod` melden keine bekannten Luecken.
+mit inzwischen 90 Tests; `pnpm audit` und `pnpm audit --prod` melden keine bekannten Luecken.
 Bei einem Update der beiden Elternpakete muessen die Overrides erneut geprueft
 und entfernt werden, sobald deren regulaere Abhaengigkeiten den Fix enthalten.
 
@@ -365,21 +391,20 @@ Commit-Messages auf Englisch nach [Conventional Commits](https://www.conventiona
 Die Hono-Anwendungsbasis mit HTTPS, Router-/Service-Trennung, manueller DI,
 Pino-Logging, Antwortzeit, CORS, Security-Headern und Antwortkompression ist
 implementiert. TOML wird mit c12 eingelesen und mit Zod validiert.
-Liveness und Readiness sind vorhanden, derzeit ohne Pruefung externer Dienste.
+Liveness ist von externen Diensten unabhaengig; Readiness prueft PostgreSQL.
 Oxfmt, Oxlint, eine separate Typpruefung, lokale Vitest-Tests und SonarQube-Konfiguration sind
 vorhanden. Nach dem separaten minimatch-Sicherheitspaket zu #19 melden
 `pnpm audit` und `pnpm audit --prod` keine bekannten Sicherheitsluecken.
-OWASP Dependency Check wurde fuer die neuen Dependencies noch nicht erneut ausgefuehrt.
+OWASP Dependency Check wurde fuer die neuen Dependencies noch nicht erneut
+ausgefuehrt; der erforderliche `NVD_API_KEY` ist lokal nicht gesetzt.
 
 Das Studierendenmodell, CSV-Testdaten und wiederholbares Neuladen sind umgesetzt
 und gegen PostgreSQL 19rc1 geprueft (#18). Geprueft sind auch Constraints,
 Beziehungen, ID-Erzeugung, Loeschkaskaden und Rollback bei einem Importfehler.
 Das Drizzle-Schema und seine Beziehungen sind aus der bestehenden Datenbank
-abgeleitet und lesend geprueft (#19, erstes Paket). DB-Konfiguration, TLS-Pool,
-manuelle DI und geordnetes Schliessen sind umgesetzt (zweites Paket).
-Das Repository mit Fetch-Join per ID und Aggregate-Abbildung ist umgesetzt
-(drittes Paket). Als naechstes folgen flexible Suche, Service-Anbindung und
-DB-Readiness fuer #19, danach
+abgeleitet und lesend geprueft (#19). DB-Konfiguration, TLS-Pool, manuelle DI,
+geordnetes Schliessen, Fetch-Joins, Aggregate-Abbildung, flexible Suche,
+Service-Validierung und DB-Readiness sind umgesetzt. Als naechstes folgt
 die lesende Studierenden-API (#20).
 Die lokalen Tests bilden nur den ersten Teil von Issue #25 ab; Integrationstests
 mit der vorgesehenen Datenbank-/Keycloak-Testumgebung folgen spaeter.

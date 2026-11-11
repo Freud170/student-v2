@@ -4,9 +4,11 @@ import { type Logger } from 'pino';
 import { Pool } from 'pg';
 import { readFile } from 'node:fs/promises';
 import { relations } from '../db/relations.mts';
+import { sql } from 'drizzle-orm';
 
 export type Database = {
     db: NodePgDatabase<typeof relations>;
+    check: () => Promise<void>;
     close: () => Promise<void>;
 };
 
@@ -31,6 +33,7 @@ export const createDatabase = async (config: DbConfig, logger: Logger): Promise<
         max: config.poolMax,
         idleTimeoutMillis: config.poolIdleTimeoutMillis,
         connectionTimeoutMillis: config.poolConnectionTimeoutMillis,
+        query_timeout: config.queryTimeoutMillis,
     });
     // Idle-Verbindungsfehler duerfen weder den Prozess beenden noch Zugangsdaten loggen.
     pool.on('error', () => logger.error('Fehler einer unbenutzten DB-Verbindung.'));
@@ -38,6 +41,9 @@ export const createDatabase = async (config: DbConfig, logger: Logger): Promise<
     let closing: Promise<void> | undefined;
     return {
         db,
+        check: async () => {
+            await db.execute(sql`select 1`);
+        },
         close: () => {
             closing ??= pool.end();
             return closing;

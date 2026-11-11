@@ -32,3 +32,4 @@ caFile = "extras/compose/postgres/init/tls/server.crt"
 poolMax = 5
 poolIdleTimeoutMillis = 30000
 poolConnectionTimeoutMillis = 5000
+queryTimeoutMillis = 5000

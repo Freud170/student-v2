@@ -44,6 +44,7 @@ describe('Konfiguration', () => {
         { db: { poolMax: 1.5 } },
         { db: { poolConnectionTimeoutMillis: 0 } },
         { db: { poolIdleTimeoutMillis: -1 } },
+        { db: { queryTimeoutMillis: 0 } },
     ])('ungueltige Werte verhindern den Start: %j', (invalid) => {
         expect(() => ConfigSchema.parse({ server: {}, ...invalid })).toThrow(ZodError);
     });

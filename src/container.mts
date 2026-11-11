@@ -11,12 +11,16 @@ export const createContainer = (
     database: Database,
     logger: Logger = createLogger(config.log),
 ) => {
+    const studentRepository = new StudentRepository(database.db);
     return {
         config,
         logger,
         database,
-        studentRepository: new StudentRepository(database.db),
-        studentService: new StudentService(logger.child({ service: 'StudentService' })),
+        studentRepository,
+        studentService: new StudentService(
+            logger.child({ service: 'StudentService' }),
+            studentRepository,
+        ),
     };
 };
 

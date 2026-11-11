@@ -59,6 +59,7 @@ describe('DB-Pool ohne echte Verbindung', () => {
             max: config.poolMax,
             idleTimeoutMillis: config.poolIdleTimeoutMillis,
             connectionTimeoutMillis: config.poolConnectionTimeoutMillis,
+            query_timeout: config.queryTimeoutMillis,
         });
         const first = database.close();
         expect(database.close()).toBe(first);
