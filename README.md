@@ -60,8 +60,36 @@ cd extras\compose\postgres
 docker compose up -d      # starten; beenden mit docker compose down
 ```
 
-Die Anwendung greift noch nicht auf die Datenbank zu; Tabellen und Testdaten folgen
-mit dem Datenmodell.
+Die Anwendung greift noch nicht auf die Datenbank zu. Die Tabellendefinitionen
+liegen in `extras/compose/postgres/init/student/sql/create-table.sql` und setzen
+das eingerichtete Schema `student` sowie den Tablespace `studentspace` voraus.
+Das Skript legt die Tabellen `student`, `adresse` und `pruefungsleistung` mit
+Constraints und Indizes an. IDs werden ab 1000 generiert; die Version beginnt
+bei 0. Matrikelnummer und E-Mail sind eindeutig, Matrikelnummer und PLZ werden
+auf ihr Ziffernformat geprueft, Noten auf die zulaessigen Notenstufen.
+Die Fremdschluessel loeschen Adresse und Pruefungsleistungen beim Loeschen eines
+Studierenden mit. Ein eindeutiger Fremdschluessel begrenzt die Adresse auf
+hoechstens eine pro Student; die Existenz einer Adresse erzwingt er nicht.
+
+Das Skript wird nicht beim App-Start ausgefuehrt. `IF NOT EXISTS` legt fehlende
+Tabellen und Indizes an, gleicht aber bestehende Definitionen nicht ab und ersetzt
+keine Migration.
+
+Unter `extras/compose/postgres/init/student/csv` liegen 5 Studierende,
+5 Adressen und 6 Pruefungsleistungen als CSV-Testdaten. `sql/copy-csv.sql` im
+benachbarten SQL-Verzeichnis importiert sie in dieser Reihenfolge mit expliziten
+Spaltenlisten. Die festen IDs liegen unter 1000 und kollidieren deshalb nicht
+mit den ab 1000 generierten IDs. Der Import setzt leere Tabellen voraus und wird
+mit Fehlerabbruch in einer gemeinsamen Transaktion ausgefuehrt; die Befehle
+stehen in der PostgreSQL-Anleitung. Er legt keine Keycloak-Benutzer an.
+Zum wiederholbaren Neuladen werden `sql/reset-data.sql` und `sql/copy-csv.sql`
+gemeinsam in einer Transaktion aufgerufen. Dabei werden ausschliesslich die drei
+Studierendentabellen geleert und ihre Identity-Sequenzen zurueckgesetzt.
+Der Ablauf ist gegen PostgreSQL 19rc1 geprueft: zwei Neuladevorgaenge liefern
+denselben Datenbestand und Sequenzstand. Ein absichtlich fehlerhafter Import
+laesst den vorherigen Bestand einschliesslich Sequenzen unveraendert.
+Der Aufruf erfolgt manuell in der getrennten Testdatenbank; die Anleitung steht
+unter [Testdaten neu laden](extras/compose/postgres/ReadMe.md#testdaten-wiederholbar-neu-laden).
 
 ## Anwendungsbasis
 
@@ -208,9 +236,12 @@ Oxfmt, Oxlint, eine separate Typpruefung, lokale Vitest-Tests und SonarQube-Konf
 vorhanden. Die Abhaengigkeiten sind aktuell und geprueft: `pnpm audit --prod` und
 OWASP Dependency Check melden keine Sicherheitsluecken.
 
-Als naechstes folgt die lesende Studierenden-API mit dem bestehenden Datenmodell
-und Drizzle an unserer vorhandenen PostgreSQL-Instanz. Die lokalen Tests bilden nur den ersten Teil von Issue #25 ab; Integrationstests mit
-der vorgesehenen Datenbank-/Keycloak-Testumgebung folgen spaeter.
+Das Studierendenmodell, CSV-Testdaten und wiederholbares Neuladen sind umgesetzt
+und gegen PostgreSQL 19rc1 geprueft (#18). Geprueft sind auch Constraints,
+Beziehungen, ID-Erzeugung, Loeschkaskaden und Rollback bei einem Importfehler.
+Als naechstes folgen die Drizzle-Anbindung (#19) und die lesende Studierenden-API (#20).
+Die lokalen Tests bilden nur den ersten Teil von Issue #25 ab; Integrationstests
+mit der vorgesehenen Datenbank-/Keycloak-Testumgebung folgen spaeter.
 
 ## Team
 
