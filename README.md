@@ -147,8 +147,9 @@ Geprueft sind Schema-Uebereinstimmung und lesende Drizzle-Abfragen ueber TLS 1.3
 5 Studierende, 5 Adressen, 6 Pruefungsleistungen, Beziehungen in beiden Richtungen,
 Studierende ohne/mit mehreren Leistungen sowie die String-/Date-Abbildung.
 Das war eine manuelle Integrationspruefung; Vitest bleibt ohne Datenbankzugriff.
-Der Drizzle-Client der Anwendung verwendet dieses Mapping. Repository, Suche
-und DB-Readiness folgen in den weiteren Paketen von #19.
+Der Drizzle-Client der Anwendung verwendet dieses Mapping. Ein Repository liest
+bereits vollstaendige Aggregate per ID; flexible Suche und DB-Readiness folgen
+im weiteren Paket von #19.
 
 ### DB-Konfiguration und Verbindungspool
 
@@ -190,6 +191,23 @@ HTTP/2 einschliesslich Shutdown und anschliessend geschlossenem Pool geprueft.
 
 ### App und Router
 
+`StudentRepository.findById(id)` in `src/student/repository/` laedt einen
+Studierenden mit Adresse und allen Pruefungsleistungen in einer parametrisierten
+SQL-Abfrage. Zwei LEFT JOINs erhalten Studierende ohne Leistungen oder Adresse.
+Die Rueckgabe entspricht dem Typ `Student` unter `src/student/entity/`:
+fehlende Adresse als `null`, fehlende Leistungen als leeres Array,
+unbekannte ID als `undefined`. DB-Fehler werden weitergegeben.
+Pruefungsleistungen sind aufsteigend nach ID geordnet. Die Abfrage verwendet
+kein LIMIT auf Join-Zeilen, damit mehrere Leistungen vollstaendig bleiben.
+Noten bleiben dezimale Strings, Zeitstempel `Date`-Werte.
+
+Der DI-Container stellt eine gemeinsame `studentRepository`-Instanz bereit.
+Service und REST-Routen verwenden sie noch nicht. Geprueft wurden alle fuenf
+Teststudierenden mit null, einer und zwei Leistungen sowie eine unbekannte ID
+in einer lesenden Transaktion ueber TLS 1.3. Die Pruefsummen aller drei Tabellen
+waren vor und nach der Pruefung identisch. Der Fall einer fehlenden Adresse
+ist durch einen lokalen Test mit simulierten Treiberzeilen abgedeckt.
+
 `src/index.mts` liest die Konfiguration, erzeugt einmal den DI-Container und startet
 den HTTPS-Server. `src/app.mts` setzt die Router und Middleware zusammen und kann
 ohne Serverstart getestet werden. Der Container haelt einen gemeinsamen Pino-Logger
@@ -208,7 +226,7 @@ werden explizit an die Router und Services uebergeben.
 | Unbekannte Route | JSON mit Status 404 |
 
 `/rest` ist der Einstieg fuer die spaetere Studierenden-API, noch keine Suche und
-keine Liste von Studierenden. Repository, Schreibrouter, GraphQL und
+keine Liste von Studierenden. Service-Anbindung, Schreibrouter, GraphQL und
 Keycloak-Anbindung folgen mit den jeweiligen Funktionen. `Student` bleibt das
 zentrale Aggregate mit Adresse (1:1) und Pruefungsleistungen (1:N).
 
@@ -262,11 +280,14 @@ pnpm run test:run     # Vitest einmalig; pnpm test fuer den Watch-Modus
 ```
 
 Die Tests pruefen App-Komposition, Health-Endpunkte, Middleware, Konfiguration,
-Pino-Ausgabe sowie DB-Pool-Konfiguration und Server-Lebenszyklus.
+Pino-Ausgabe sowie DB-Pool-Konfiguration, Server-Lebenszyklus und Repository.
 Sie verwenden keine laufenden Server und keine Datenbank-Fixtures. Die Pino-Tests
 starten eigene Node-Prozesse, pruefen deren Ausgabe und entfernen ihre temporaeren
 Logverzeichnisse unter `temp`. Pool- und Server-Lebenszyklustests simulieren
 externe Ressourcen; sie oeffnen weder einen DB-Zugang noch einen HTTP-Port.
+Die Repository-Tests ersetzen nur den PostgreSQL-Treiber; SQL-Erzeugung und
+Ergebnisabbildung laufen mit Drizzle. Sie pruefen Aggregate, Parametrisierung,
+LEFT JOINs ohne LIMIT und die Weitergabe von DB-Fehlern.
 Automatisierte Tests gegen PostgreSQL/Keycloak, Bruno und Lasttests
 sind noch nicht eingerichtet.
 
@@ -356,7 +377,9 @@ Beziehungen, ID-Erzeugung, Loeschkaskaden und Rollback bei einem Importfehler.
 Das Drizzle-Schema und seine Beziehungen sind aus der bestehenden Datenbank
 abgeleitet und lesend geprueft (#19, erstes Paket). DB-Konfiguration, TLS-Pool,
 manuelle DI und geordnetes Schliessen sind umgesetzt (zweites Paket).
-Als naechstes folgen Repository, Fetch-Join, flexible Suche und DB-Readiness fuer #19, danach
+Das Repository mit Fetch-Join per ID und Aggregate-Abbildung ist umgesetzt
+(drittes Paket). Als naechstes folgen flexible Suche, Service-Anbindung und
+DB-Readiness fuer #19, danach
 die lesende Studierenden-API (#20).
 Die lokalen Tests bilden nur den ersten Teil von Issue #25 ab; Integrationstests
 mit der vorgesehenen Datenbank-/Keycloak-Testumgebung folgen spaeter.
