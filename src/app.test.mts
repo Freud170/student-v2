@@ -2,7 +2,9 @@ import { describe, expect, test, vi } from 'vitest';
 import { ConfigSchema } from './config/config.mts';
 import { createApp } from './app.mts';
 import { createContainer } from './container.mts';
+import { drizzle } from 'drizzle-orm/node-postgres';
 import { pino } from 'pino';
+import { relations } from './db/relations.mts';
 
 const origin = 'https://localhost:5173';
 
@@ -10,7 +12,8 @@ const setup = (level = 'debug') => {
     const lines: string[] = [];
     const logger = pino({ level }, { write: (line) => lines.push(line) });
     const config = ConfigSchema.parse({ server: {}, cors: { origins: [origin] } });
-    const container = createContainer(config, logger);
+    const database = { db: drizzle.mock({ relations }), close: vi.fn<() => Promise<void>>() };
+    const container = createContainer(config, database, logger);
     return { app: createApp(container), container, lines };
 };
 

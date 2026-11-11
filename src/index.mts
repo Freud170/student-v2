@@ -1,38 +1,35 @@
-// Zusammensetzen und Starten der Anwendung mit HTTPS (TLS).
-
-import { createApp } from './app.mts';
 import { createContainer } from './container.mts';
-import { createSecureServer } from 'node:http2';
+import { createDatabase } from './config/db.mts';
+import { createLogger } from './logger/logger.mts';
 import { getConfig } from './config/config.mts';
-import { readFile } from 'node:fs/promises';
-import { serve } from '@hono/node-server';
+import process from 'node:process';
+import { startServer } from './server.mts';
 
-// Konfiguration aus src/config/config.toml (Destructuring)
 const config = await getConfig();
-const container = createContainer(config);
-const app = createApp(container);
-const { port, keyFile, certFile, allowHTTP1 } = config.server;
+const logger = createLogger(config.log);
 
-// Privater Schluessel und selbstsigniertes Zertifikat fuer TLS
-const key = await readFile(keyFile, { encoding: 'utf8' });
-const cert = await readFile(certFile, { encoding: 'utf8' });
-
-// Node-Server mit HTTP/2 und TLS 1.3 starten.
-serve(
-    {
-        fetch: app.fetch,
-        port,
-        createServer: createSecureServer,
-        serverOptions: {
-            key,
-            cert,
-            minVersion: 'TLSv1.3',
-            maxVersion: 'TLSv1.3',
-            // HTTP/1.1 zusaetzlich erlauben, z.B. fuer Bruno
-            allowHTTP1,
-        },
-    },
-    (info) => {
-        container.logger.info(`Der Server ist mit HTTPS gestartet: https://localhost:${info.port}`);
-    },
-);
+try {
+    const database = await createDatabase(config.db, logger.child({ module: 'db' }));
+    const running = await startServer(createContainer(config, database, logger));
+    let stopping = false;
+    const stop = () => {
+        if (stopping) {
+            return;
+        }
+        stopping = true;
+        (async () => {
+            try {
+                await running.close();
+                logger.info('HTTP-Server und DB-Pool sind geschlossen.');
+            } catch {
+                logger.error('Fehler beim Beenden der Anwendung.');
+                process.exitCode = 1;
+            }
+        })();
+    };
+    process.once('SIGINT', stop);
+    process.once('SIGTERM', stop);
+} catch {
+    logger.error('Die Anwendung konnte nicht gestartet werden. DB- und TLS-Konfiguration pruefen.');
+    process.exitCode = 1;
+}

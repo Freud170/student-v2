@@ -41,7 +41,10 @@ pnpm run dev       # HTTPS unter https://localhost:3000 mit Watch-Modus
 
 `pnpm run hello` bleibt als Alias fuer den Watch-Modus verfuegbar. Vor dem Start
 muss Port 3000 frei sein, insbesondere darf dort nicht bereits die Anwendung aus
-der ersten Abgabe laufen. Fuer diesen Stand werden PostgreSQL und Keycloak nicht
+der ersten Abgabe laufen. Beim Start werden die DB-Passwortdatei und das
+oeffentliche DB-Zertifikat aus `[db]` gelesen und der Verbindungspool erzeugt.
+Verbindungen entstehen erst bei einer DB-Abfrage; die bisherigen Greeting- und
+Health-Routen fuehren noch keine solche Abfrage aus. Keycloak wird noch nicht
 benoetigt; der Start laedt keine Daten oder Benutzer nach.
 
 Der Server läuft nur mit HTTPS (HTTP/2 und TLS 1.3, zusätzlich HTTP/1.1 für Bruno).
@@ -60,7 +63,8 @@ cd extras\compose\postgres
 docker compose up -d      # starten; beenden mit docker compose down
 ```
 
-Die Anwendung greift noch nicht auf die Datenbank zu. Die Tabellendefinitionen
+Die Anwendung stellt einen Drizzle-Client im DI-Container bereit; ihre Routen
+greifen noch nicht auf die Datenbank zu. Die Tabellendefinitionen
 liegen in `extras/compose/postgres/init/student/sql/create-table.sql` und setzen
 das eingerichtete Schema `student` sowie den Tablespace `studentspace` voraus.
 Das Skript legt die Tabellen `student`, `adresse` und `pruefungsleistung` mit
@@ -143,15 +147,54 @@ Geprueft sind Schema-Uebereinstimmung und lesende Drizzle-Abfragen ueber TLS 1.3
 5 Studierende, 5 Adressen, 6 Pruefungsleistungen, Beziehungen in beiden Richtungen,
 Studierende ohne/mit mehreren Leistungen sowie die String-/Date-Abbildung.
 Das war eine manuelle Integrationspruefung; Vitest bleibt ohne Datenbankzugriff.
-Die laufende Anwendung verwendet das Mapping noch nicht. Verbindungspool,
-Repository, Suche und DB-Readiness folgen in den weiteren Paketen von #19.
+Der Drizzle-Client der Anwendung verwendet dieses Mapping. Repository, Suche
+und DB-Readiness folgen in den weiteren Paketen von #19.
+
+### DB-Konfiguration und Verbindungspool
+
+`[db]` in `src/config/config.toml` wird mit Zod validiert. `src/config/db.mts`
+erzeugt einen `pg`-Pool und einen Drizzle-Client; beide leben so lange wie die
+Anwendung. Die DB-Abhaengigkeit wird explizit an `createContainer` uebergeben.
+Das Importieren der Module erzeugt keine Verbindung.
+
+| Einstellung | Default / Bedeutung |
+|---|---|
+| `host`, `port` | `localhost`, `5432` |
+| `database`, `user` | jeweils `student` |
+| `passwordFile` | `extras/compose/postgres/password.txt`; Inhalt wird lokal gelesen |
+| `caFile` | `extras/compose/postgres/init/tls/server.crt`; Vertrauensanker fuer den DB-Server |
+| `poolMax` | 5 Verbindungen, erlaubt: 1 bis 100 |
+| `poolIdleTimeoutMillis` | 30000 ms; unbenutzte Verbindungen freigeben |
+| `poolConnectionTimeoutMillis` | 5000 ms; Verbindungsaufbau begrenzen |
+
+Beide Timeouts muessen zwischen 1 und 60000 ms liegen. Explizite relative
+Dateipfade gelten ab dem Projektverzeichnis. Ohne Pfadangabe werden die
+entsprechenden Dateien relativ zum Konfigurationsmodul aufgeloest.
+Fehlende Dateien oder eine leere Passwortdatei verhindern den Start.
+Die Verbindung verwendet direkte TLS-Aushandlung mit PostgreSQL, ausschliesslich
+TLS 1.3 und aktivierter Zertifikats- und Hostnamenpruefung. Das CA-Zertifikat muss
+zum laufenden Server passen; es wird kein privater DB-Schluessel benoetigt.
+SQL-Abfragen und Parameter werden nicht automatisch geloggt. Fehler unbenutzter
+Poolverbindungen werden ohne interne Fehlerdetails protokolliert.
+
+`src/server.mts` startet HTTPS und verwaltet den Shutdown. Bei `Strg+C` (`SIGINT`)
+oder `SIGTERM` nimmt der Server keine neuen Verbindungen mehr an, laesst laufende
+HTTP-Anfragen und HTTP/2-Sessions auslaufen und schliesst danach den Pool.
+Mehrfaches Schliessen verwendet denselben Abschlussvorgang. Auch ein
+fehlgeschlagener HTTPS-Start gibt den Pool frei.
+
+Manuell geprueft: TLS 1.3 mit dem DB-User `student`, Wiederverwendung einer
+Verbindung, Bestand 5/5/6, Pool-Schliessen, Ablehnung eines fremden CA-Zertifikats
+und Fehler bei nicht erreichbarer DB. HTTPS wurde mit HTTP/1.1-Keep-Alive und
+HTTP/2 einschliesslich Shutdown und anschliessend geschlossenem Pool geprueft.
 
 ### App und Router
 
 `src/index.mts` liest die Konfiguration, erzeugt einmal den DI-Container und startet
 den HTTPS-Server. `src/app.mts` setzt die Router und Middleware zusammen und kann
 ohne Serverstart getestet werden. Der Container haelt einen gemeinsamen Pino-Logger
-und eine `StudentService`-Instanz fuer alle Requests der Anwendung. Abhaengigkeiten
+und eine `StudentService`-Instanz sowie den gemeinsamen Drizzle-Client mit Pool
+fuer die Anwendung. Abhaengigkeiten
 werden explizit an die Router und Services uebergeben.
 
 | Route | Verhalten |
@@ -218,10 +261,13 @@ pnpm run typecheck    # TypeScript-Pruefung ohne Ausgabe von Build-Dateien
 pnpm run test:run     # Vitest einmalig; pnpm test fuer den Watch-Modus
 ```
 
-Die Tests pruefen App-Komposition, Health-Endpunkte, Middleware, Konfiguration und Pino-Ausgabe.
+Die Tests pruefen App-Komposition, Health-Endpunkte, Middleware, Konfiguration,
+Pino-Ausgabe sowie DB-Pool-Konfiguration und Server-Lebenszyklus.
 Sie verwenden keine laufenden Server und keine Datenbank-Fixtures. Die Pino-Tests
 starten eigene Node-Prozesse, pruefen deren Ausgabe und entfernen ihre temporaeren
-Logverzeichnisse unter `temp`. Tests gegen PostgreSQL/Keycloak, Bruno und Lasttests
+Logverzeichnisse unter `temp`. Pool- und Server-Lebenszyklustests simulieren
+externe Ressourcen; sie oeffnen weder einen DB-Zugang noch einen HTTP-Port.
+Automatisierte Tests gegen PostgreSQL/Keycloak, Bruno und Lasttests
 sind noch nicht eingerichtet.
 
 Die Regeln für Oxlint stehen in `oxlint.config.mts`; alle Kategorien sind als
@@ -308,8 +354,9 @@ Das Studierendenmodell, CSV-Testdaten und wiederholbares Neuladen sind umgesetzt
 und gegen PostgreSQL 19rc1 geprueft (#18). Geprueft sind auch Constraints,
 Beziehungen, ID-Erzeugung, Loeschkaskaden und Rollback bei einem Importfehler.
 Das Drizzle-Schema und seine Beziehungen sind aus der bestehenden Datenbank
-abgeleitet und lesend geprueft (#19, erstes Paket). Als naechstes folgen die
-DB-Anbindung der Anwendung, Repository und flexible Suche fuer #19, danach
+abgeleitet und lesend geprueft (#19, erstes Paket). DB-Konfiguration, TLS-Pool,
+manuelle DI und geordnetes Schliessen sind umgesetzt (zweites Paket).
+Als naechstes folgen Repository, Fetch-Join, flexible Suche und DB-Readiness fuer #19, danach
 die lesende Studierenden-API (#20).
 Die lokalen Tests bilden nur den ersten Teil von Issue #25 ab; Integrationstests
 mit der vorgesehenen Datenbank-/Keycloak-Testumgebung folgen spaeter.
