@@ -82,8 +82,14 @@ Spaltenlisten. Die festen IDs liegen unter 1000 und kollidieren deshalb nicht
 mit den ab 1000 generierten IDs. Der Import setzt leere Tabellen voraus und wird
 mit Fehlerabbruch in einer gemeinsamen Transaktion ausgefuehrt; die Befehle
 stehen in der PostgreSQL-Anleitung. Er legt keine Keycloak-Benutzer an.
-Die Ausfuehrung gegen die Testdatenbank und der Ablauf zum wiederholbaren Neuladen
-sind noch nicht geprueft bzw. umgesetzt.
+Zum wiederholbaren Neuladen werden `sql/reset-data.sql` und `sql/copy-csv.sql`
+gemeinsam in einer Transaktion aufgerufen. Dabei werden ausschliesslich die drei
+Studierendentabellen geleert und ihre Identity-Sequenzen zurueckgesetzt.
+Der Ablauf ist gegen PostgreSQL 19rc1 geprueft: zwei Neuladevorgaenge liefern
+denselben Datenbestand und Sequenzstand. Ein absichtlich fehlerhafter Import
+laesst den vorherigen Bestand einschliesslich Sequenzen unveraendert.
+Der Aufruf erfolgt manuell in der getrennten Testdatenbank; die Anleitung steht
+unter [Testdaten neu laden](extras/compose/postgres/ReadMe.md#testdaten-wiederholbar-neu-laden).
 
 ## Anwendungsbasis
 
@@ -230,9 +236,10 @@ Oxfmt, Oxlint, eine separate Typpruefung, lokale Vitest-Tests und SonarQube-Konf
 vorhanden. Die Abhaengigkeiten sind aktuell und geprueft: `pnpm audit --prod` und
 OWASP Dependency Check melden keine Sicherheitsluecken.
 
-Die SQL-Definitionen, CSV-Testdaten und das Importskript fuer das Studierendenmodell
-liegen vor. Als naechstes folgt ein gepruefter Ablauf zum Neuladen der Testdatenbank
-(#18), danach die Drizzle-Anbindung (#19) und die lesende Studierenden-API (#20).
+Das Studierendenmodell, CSV-Testdaten und wiederholbares Neuladen sind umgesetzt
+und gegen PostgreSQL 19rc1 geprueft (#18). Geprueft sind auch Constraints,
+Beziehungen, ID-Erzeugung, Loeschkaskaden und Rollback bei einem Importfehler.
+Als naechstes folgen die Drizzle-Anbindung (#19) und die lesende Studierenden-API (#20).
 Die lokalen Tests bilden nur den ersten Teil von Issue #25 ab; Integrationstests
 mit der vorgesehenen Datenbank-/Keycloak-Testumgebung folgen spaeter.
 

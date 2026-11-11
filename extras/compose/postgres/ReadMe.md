@@ -91,15 +91,14 @@ Angelegt werden der DB-User `student`, die Datenbank `student`, der Tablespace
 Das Skript setzt Schema und Tablespace voraus und legt fehlende Tabellen und
 Indizes an. Bestehende Tabellendefinitionen werden nicht migriert.
 
-## Tabellen und CSV-Testdaten importieren (vorbereitet)
+## Tabellen und CSV-Testdaten importieren
 
-Dieser Ablauf ist noch nicht gegen die Testdatenbank geprueft. Voraussetzung ist
-die eingerichtete `student-v2`-Instanz mit den eigenen Volumes, Schema `student`
+Voraussetzung ist die eingerichtete `student-v2`-Instanz mit den eigenen Volumes, Schema `student`
 und Tablespace `studentspace`. Die aktuellen SQL- und CSV-Dateien muessen wie in
 Schritt 2 im Init-Volume liegen und fuer den PostgreSQL-Prozess lesbar sein.
 Eine lokale Dateiaenderung aktualisiert das Named Volume nicht automatisch.
-Bei einer bereits eingerichteten Instanz folgt das gezielte Nachladen der Dateien
-mit dem Ablauf zum wiederholbaren Neuladen; die Ersteinrichtung nicht wiederholen.
+Bei einer bereits eingerichteten Instanz die Dateien wie im folgenden Abschnitt
+gezielt aktualisieren; die Ersteinrichtung nicht wiederholen.
 
 Nur fuer eine leere Testdatenbank bzw. leere Tabellen, aus
 `extras\compose\postgres`:
@@ -129,7 +128,96 @@ frisch angelegten Tabellen beginnen weiterhin bei 1000.
 Das Importskript leert keine Tabellen und ist allein kein wiederholbares Neuladen:
 ein zweiter Import derselben IDs scheitert an den Primaerschluesseln. Es wird
 nicht beim App-Start ausgefuehrt und legt keine Keycloak-Benutzer an.
-Zuruecksetzen, erneutes Laden und die Datenbankpruefungen folgen in Paket 3 von #18.
+
+## Testdaten wiederholbar neu laden
+
+Nur fuer die `student-v2`-Testdatenbank: Alle vorhandenen Studierenden, Adressen
+und Pruefungsleistungen werden durch die CSV-Testdaten ersetzt. Die Anwendung
+muss dabei beendet sein. Die Tabellen muessen bereits mit `create-table.sql`
+angelegt worden sein. Schema, Tabellenstruktur, Rollen und Zertifikate bleiben
+erhalten. Vorher den aktiven Container und seine Volume-Zuordnung pruefen:
+
+```powershell
+docker compose ps
+docker inspect postgres --format '{{.Config.Image}}'
+docker inspect postgres --format '{{range .Mounts}}{{println .Name .Destination}}{{end}}'
+```
+
+Erwartet werden `postgres:19rc1-trixie`, `pg_data_student_v2` unter
+`/var/lib/postgresql/19/docker`, `pg_tablespace_student_v2` unter `/tablespace`
+und `pg_init_student_v2` unter `/init`. Bei einer anderen Zuordnung nicht fortfahren.
+
+Aktuelle SQL- und CSV-Dateien gezielt ins Init-Volume kopieren, aus
+`extras\compose\postgres`:
+
+```powershell
+docker run -v pg_init_student_v2:/init -v ./init:/tmp/init:ro --rm -it -u 0 --entrypoint '' postgres:19rc1-trixie /bin/bash
+```
+
+In der Bash des Hilfscontainers:
+
+```bash
+mkdir -p /init/student/csv
+cp /tmp/init/student/sql/*.sql /init/student/sql/
+cp /tmp/init/student/csv/*.csv /init/student/csv/
+chown postgres:postgres /init/student/sql /init/student/csv /init/student/sql/*.sql /init/student/csv/*.csv
+chmod 400 /init/student/sql/*.sql /init/student/csv/*.csv
+exit
+```
+
+Danach in PowerShell einen einzigen `psql`-Aufruf verwenden:
+
+```powershell
+docker compose exec postgres psql --dbname=student --username=postgres --set=ON_ERROR_STOP=1 --single-transaction --file=/init/student/sql/reset-data.sql --file=/init/student/sql/copy-csv.sql
+```
+
+`reset-data.sql` leert nur die drei explizit genannten Tabellen mit `TRUNCATE`
+und setzt ihre Identity-Sequenzen auf den Startwert 1000 zurueck. Es verwendet
+kein `CASCADE`; unerwartete Fremdschluessel aus weiteren Tabellen fuehren zum
+Abbruch. Durch `--single-transaction` werden Reset und alle drei CSV-Importe
+gemeinsam abgeschlossen. Bei einem Fehler bleiben Daten und Sequenzen auf dem
+Stand vor dem Aufruf. Jeder erfolgreiche Aufruf stellt dieselben 5 Studierenden,
+5 Adressen und 6 Leistungen wieder her.
+
+Anschliessend den Bestand pruefen:
+
+```powershell
+docker compose exec postgres psql --dbname=student --username=student --set=ON_ERROR_STOP=1 --command="SELECT (SELECT count(*) FROM student.student) AS studierende, (SELECT count(*) FROM student.adresse) AS adressen, (SELECT count(*) FROM student.pruefungsleistung) AS leistungen;"
+```
+
+Erwartetes Ergebnis: `5 | 5 | 6`. Die SQL-Konsole kann fuer die Beziehungspruefung
+verwendet werden:
+
+```sql
+SELECT s.id, count(DISTINCT a.id) AS adressen, count(p.id) AS leistungen
+FROM student.student AS s
+LEFT JOIN student.adresse AS a ON a.student_id = s.id
+LEFT JOIN student.pruefungsleistung AS p ON p.student_id = s.id
+GROUP BY s.id ORDER BY s.id;
+```
+
+Erwartet: IDs `1, 20, 30, 40, 50`, jeweils eine Adresse und der Reihe nach
+`2, 0, 1, 2, 1` Leistungen. Das Neuladen wird ausschliesslich manuell aufgerufen;
+App-Start und lokale Vitest-Tests veraendern die Datenbank nicht.
+
+Gegen PostgreSQL 19rc1 geprueft: Erstimport, zwei aufeinanderfolgende Neuladevorgaenge
+mit identischen Daten und Sequenzen, Identity-Start bei 1000, Version 0,
+Eindeutigkeit, Pflichtfelder, Matrikelnummer-/PLZ-Format, Notenstufen,
+Fremdschluessel und Loeschkaskaden. Ein gezielt fehlerhafter COPY-Aufruf nach dem
+Reset hat den vorherigen Datenbestand und alle drei Sequenzen vollstaendig
+erhalten. Diese Datenbankpruefungen sind manuelle Integrationspruefungen und kein
+Teil von `pnpm run test:run`.
+
+## TLS-Verbindung pruefen
+
+Eine Verbindung mit Hostnamen- und Zertifikatspruefung aus dem laufenden Container:
+
+```powershell
+docker compose exec postgres psql --dbname="host=postgres dbname=student sslmode=verify-full sslrootcert=/init/tls/server.crt" --username=student --set=ON_ERROR_STOP=1 --command="SELECT ssl, version FROM pg_stat_ssl WHERE pid = pg_backend_pid();"
+```
+
+Das vorhandene Zertifikat deckt `postgres`, `localhost` und `127.0.0.1` ab.
+Die Verbindung mit `sslmode=verify-full` wurde erfolgreich mit TLS 1.3 geprueft.
 
 ## Betrieb
 
