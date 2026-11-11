@@ -1,0 +1,75 @@
+# PostgreSQL-Server mit TLS fuer student-v2 (Einrichtung siehe ReadMe.md)
+# Aufruf:   docker compose up
+#           docker compose down
+
+services:
+  postgres:
+    # https://github.com/docker-library/postgres/blob/master/19/trixie/Dockerfile
+    image: postgres:19rc1-trixie
+    ports:
+      - published: 5432
+        target: 5432
+    # Bei der Ersteinrichtung voruebergehend auskommentieren (Start ohne TLS, siehe ReadMe.md)
+    command:
+      - "--ssl=on"
+      - "--ssl-cert-file=/var/lib/postgresql/19/docker/server.crt"
+      - "--ssl-key-file=/var/lib/postgresql/19/docker/server.key"
+    volumes:
+      - pg_data:/var/lib/postgresql/19/docker
+      - pg_tablespace:/tablespace
+      - pg_init:/init:ro
+    environment:
+      TZ: Europe/Berlin
+      # Passwort des Superusers "postgres" aus dem Docker Secret (password.txt)
+      POSTGRES_PASSWORD_FILE: /run/secrets/db_password
+      # https://www.postgresql.org/docs/current/auth-pg-hba-conf.html
+      POSTGRES_HOST_AUTH_METHOD: scram-sha-256
+      POSTGRES_INITDB_ARGS: "--auth-local=scram-sha-256 --auth-host=scram-sha-256"
+    secrets: [db_password]
+    networks: [acme-network]
+    # Bei der Ersteinrichtung voruebergehend auskommentieren (siehe ReadMe.md)
+    user: "postgres:postgres"
+    hostname: postgres
+    container_name: postgres
+    # https://docs.docker.com/reference/compose-file/services/#cap_drop
+    cap_drop: [ALL]
+    # Nur bei der Ersteinrichtung einkommentieren: initdb setzt als root Owner und Rechte
+    # des leeren Datenverzeichnisses (siehe ReadMe.md)
+    #cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETGID, SETUID]
+    healthcheck:
+      test: [CMD, pg_isready, --dbname=postgres, --username=postgres]
+      interval: 5s
+      timeout: 2s
+      retries: 2
+      start_period: 5s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 768M
+        reservations:
+          cpus: "0.5"
+          memory: 512M
+
+# Wird im Container als Datei /run/secrets/db_password bereitgestellt
+secrets:
+  db_password:
+    file: ./password.txt
+
+# Eigene Volumes fuer student-v2 (PostgreSQL 19rc1); die Volumes pg_data usw. aus
+# Aufgabe 1 (PostgreSQL 19beta4) bleiben unangetastet.
+volumes:
+  pg_data:
+    name: pg_data_student_v2
+    external: true
+  pg_tablespace:
+    name: pg_tablespace_student_v2
+    external: true
+  pg_init:
+    name: pg_init_student_v2
+    external: true
+
+networks:
+  acme-network:
+    name: acme-network
