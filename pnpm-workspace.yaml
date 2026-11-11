@@ -1,5 +1,4 @@
 # https://pnpm.io/settings
-# Angelehnt an das Hono-Beispielprojekt aus der Vorlesung
 
 # Abbruch, wenn die pnpm-Version nicht zu "packageManager" in package.json passt
 # https://pnpm.io/settings/cli#pmonfail
@@ -10,7 +9,7 @@ pmOnFail: error
 saveExact: true
 savePrefix: ""
 
-# Vite/Vitest benoetigen den nativen esbuild-Build wie im Hono-Beispiel.
+# Vite/Vitest benoetigen den nativen esbuild-Build.
 allowBuilds:
   esbuild: true
 
@@ -24,6 +23,12 @@ blockExoticSubdeps: true
 # Ausnahme von der Mindest-Wartezeit fuer neue Releases (Default: 1 Tag)
 # https://pnpm.io/settings/dependency-resolution#minimumreleaseage
 minimumReleaseAgeExclude: ["hono@5.0.0-rc.0"]
+
+# GHSA-g3hv-75wg-m249: auf die geprueften ESLint-Abhaengigkeiten begrenzt.
+# Nach einem Update dieser Elternpakete erneut pruefen und moeglichst entfernen.
+overrides:
+  "eslint@10.14.0>minimatch": "11.0.1"
+  "@eslint/config-array@0.23.5>minimatch": "11.0.1"
 
 lockfile:
   format: v13

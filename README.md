@@ -266,6 +266,18 @@ gespeichert wird und nicht ins Repo gehört:
 Bewusst ignorierte Fehlalarme stehen mit Begründung in
 `scripts/dependency-check-suppression.xml`.
 
+Als ergaenzendes Sicherheitspaket zum Drizzle-Feature (#19) wird
+`minimatch` fuer `eslint@10.14.0` und `@eslint/config-array@0.23.5` gezielt auf
+`11.0.1` festgelegt. Die Overrides in `pnpm-workspace.yaml` beheben
+[GHSA-g3hv-75wg-m249](https://github.com/advisories/GHSA-g3hv-75wg-m249) in der
+Entwicklungsabhaengigkeit; die Elternpakete verlangen noch Version 10.
+Da dies deren Versionsbereich ueberschreitet, wurden rekursive Dateisuche,
+Brace-/Extglob-Muster, partielle Pfadtreffer, Ignore-Muster und die
+Regelausfuehrung mit ESLint gesondert geprueft. Alle vier Projektchecks bestehen
+mit 37 Tests; `pnpm audit` und `pnpm audit --prod` melden keine bekannten Luecken.
+Bei einem Update der beiden Elternpakete muessen die Overrides erneut geprueft
+und entfernt werden, sobald deren regulaere Abhaengigkeiten den Fix enthalten.
+
 Die Warnung „No lock file exists … run `npm install --package-lock`“ kann ignoriert
 werden: Sie kommt vom Node Package Analyzer, der nur `package-lock.json` von npm
 liest. Unser `pnpm-lock.yaml` wertet der Pnpm Audit Analyzer aus. Dafür übergibt das
@@ -288,10 +300,8 @@ Pino-Logging, Antwortzeit, CORS, Security-Headern und Antwortkompression ist
 implementiert. TOML wird mit c12 eingelesen und mit Zod validiert.
 Liveness und Readiness sind vorhanden, derzeit ohne Pruefung externer Dienste.
 Oxfmt, Oxlint, eine separate Typpruefung, lokale Vitest-Tests und SonarQube-Konfiguration sind
-vorhanden. `pnpm audit --prod` meldet nach Ergaenzung von Drizzle keine bekannten
-Sicherheitsluecken. Der vollstaendige `pnpm audit` meldet eine moderate Luecke
-in der bereits vorhandenen Entwicklungsabhaengigkeit `minimatch` 10.2.6 ueber
-ESLint ([GHSA-g3hv-75wg-m249](https://github.com/advisories/GHSA-g3hv-75wg-m249)).
+vorhanden. Nach dem separaten minimatch-Sicherheitspaket zu #19 melden
+`pnpm audit` und `pnpm audit --prod` keine bekannten Sicherheitsluecken.
 OWASP Dependency Check wurde fuer die neuen Dependencies noch nicht erneut ausgefuehrt.
 
 Das Studierendenmodell, CSV-Testdaten und wiederholbares Neuladen sind umgesetzt
