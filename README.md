@@ -30,7 +30,7 @@ Rollen: `admin` und `student`.
 ## Schnellstart
 
 Voraussetzungen: Node `^26.13.0` und
-pnpm `^12.18.0` (jeweils innerhalb derselben Hauptversion). Eine unpassende
+pnpm `^12.19.0` (jeweils innerhalb derselben Hauptversion). Eine unpassende
 pnpm-Version führt zum Abbruch, siehe `pmOnFail` in `pnpm-workspace.yaml`.
 
 ```powershell
@@ -93,6 +93,61 @@ unter [Testdaten neu laden](extras/compose/postgres/ReadMe.md#testdaten-wiederho
 
 ## Anwendungsbasis
 
+### Drizzle-Schema
+
+`src/db/schema.mts` bildet die bestehenden Tabellen im Schema `student` mit
+Drizzle ab. Spaltentypen, Pflichtfelder, Identity-Start bei 1000, Version 0,
+Constraints, Indizes und Loeschkaskaden entsprechen der vorhandenen Datenbank.
+Die Zeitstempel haben weiterhin keinen Default. `numeric(2,1)` wird als String
+gelesen, die Zeitstempel als `Date`; Matrikelnummer und PLZ bleiben Strings.
+`src/db/relations.mts` beschreibt die Beziehungen in beiden Richtungen:
+hoechstens eine Adresse und beliebig viele Pruefungsleistungen pro Student.
+
+Das Mapping wurde mit `drizzle-kit pull` aus der laufenden Datenbank abgeleitet
+und als `.mts` aufbereitet. Drizzle Kit verwendet `drizzle.config.ts` und
+`DATABASE_URL` aus der Umgebung oder einer lokal ignorierten `.env`.
+Die generierten Rohdateien unter `drizzle/` bleiben lokal und sind ignoriert;
+versioniert werden die aufbereiteten Module unter `src/db/`.
+
+Zur erstmaligen Ableitung in einem frischen Checkout ohne lokales `drizzle/`
+im Projektverzeichnis zuerst Container und Volumes gemaess
+der [PostgreSQL-Anleitung](extras/compose/postgres/ReadMe.md) pruefen. Das lokale
+oeffentliche Zertifikat muss dem Serverzertifikat entsprechen. Danach:
+
+```powershell
+$dbPassword = (Get-Content extras/compose/postgres/password.txt -Raw).Trim()
+$certPath = (Resolve-Path extras/compose/postgres/init/tls/server.crt).Path
+$previousDatabaseUrl = $env:DATABASE_URL
+try {
+    $env:DATABASE_URL = 'postgresql://student:' + [Uri]::EscapeDataString($dbPassword) + '@localhost:5432/student?schema=student&sslmode=verify-full&sslrootcert=' + [Uri]::EscapeDataString($certPath) + '&options=' + [Uri]::EscapeDataString('-c default_transaction_read_only=on')
+    pnpm exec drizzle-kit pull --output json
+    # Nur nach erfolgreichem Pull: Mapping gegen den lokalen DB-Snapshot pruefen.
+    # Erwartet: status "no_changes".
+    if ($LASTEXITCODE -eq 0) {
+        pnpm exec drizzle-kit generate --explain --output json
+    }
+} finally {
+    $env:DATABASE_URL = $previousDatabaseUrl
+    $dbPassword = $null
+}
+```
+
+Der Pull liest die Datenbank und schreibt ausschliesslich lokale Dateien.
+`generate --explain` vergleicht das Mapping mit dem lokalen Snapshot, ohne eine
+Migration anzuwenden. Die Verbindung verwendet Zertifikats- und Hostnamenpruefung
+sowie ausschliesslich lesende Transaktionen. Es wird kein `push`, `migrate` oder
+`pull --init` ausgefuehrt. Tabellen werden weiterhin ueber die vorhandenen
+SQL-Skripte verwaltet; ein Migrationsverfahren ist noch nicht eingerichtet.
+
+Geprueft sind Schema-Uebereinstimmung und lesende Drizzle-Abfragen ueber TLS 1.3:
+5 Studierende, 5 Adressen, 6 Pruefungsleistungen, Beziehungen in beiden Richtungen,
+Studierende ohne/mit mehreren Leistungen sowie die String-/Date-Abbildung.
+Das war eine manuelle Integrationspruefung; Vitest bleibt ohne Datenbankzugriff.
+Die laufende Anwendung verwendet das Mapping noch nicht. Verbindungspool,
+Repository, Suche und DB-Readiness folgen in den weiteren Paketen von #19.
+
+### App und Router
+
 `src/index.mts` liest die Konfiguration, erzeugt einmal den DI-Container und startet
 den HTTPS-Server. `src/app.mts` setzt die Router und Middleware zusammen und kann
 ohne Serverstart getestet werden. Der Container haelt einen gemeinsamen Pino-Logger
@@ -110,7 +165,7 @@ werden explizit an die Router und Services uebergeben.
 | Unbekannte Route | JSON mit Status 404 |
 
 `/rest` ist der Einstieg fuer die spaetere Studierenden-API, noch keine Suche und
-keine Liste von Studierenden. Repository, Datenmodell, Schreibrouter, GraphQL und
+keine Liste von Studierenden. Repository, Schreibrouter, GraphQL und
 Keycloak-Anbindung folgen mit den jeweiligen Funktionen. `Student` bleibt das
 zentrale Aggregate mit Adresse (1:1) und Pruefungsleistungen (1:N).
 
@@ -129,7 +184,7 @@ Die Hono-Optionen heissen `allowHeaders` und `exposeHeaders`.
 
 Antworten werden bei passendem `Accept-Encoding` mit gzip oder deflate komprimiert.
 `hono/compress` komprimiert keine eingehenden Request-Bodies. Die entsprechende
-Formulierung in Issue #14 ist damit noch nicht abgedeckt; fuer die spaeteren
+Anforderung wird im offenen Issue #41 weitergefuehrt; fuer die spaeteren
 Schreibendpunkte muss die Behandlung komprimierter Requests festgelegt werden.
 
 `X-Response-Time` misst die Bearbeitungszeit bis zur fertigen Response, ohne die
@@ -233,13 +288,19 @@ Pino-Logging, Antwortzeit, CORS, Security-Headern und Antwortkompression ist
 implementiert. TOML wird mit c12 eingelesen und mit Zod validiert.
 Liveness und Readiness sind vorhanden, derzeit ohne Pruefung externer Dienste.
 Oxfmt, Oxlint, eine separate Typpruefung, lokale Vitest-Tests und SonarQube-Konfiguration sind
-vorhanden. Die Abhaengigkeiten sind aktuell und geprueft: `pnpm audit --prod` und
-OWASP Dependency Check melden keine Sicherheitsluecken.
+vorhanden. `pnpm audit --prod` meldet nach Ergaenzung von Drizzle keine bekannten
+Sicherheitsluecken. Der vollstaendige `pnpm audit` meldet eine moderate Luecke
+in der bereits vorhandenen Entwicklungsabhaengigkeit `minimatch` 10.2.6 ueber
+ESLint ([GHSA-g3hv-75wg-m249](https://github.com/advisories/GHSA-g3hv-75wg-m249)).
+OWASP Dependency Check wurde fuer die neuen Dependencies noch nicht erneut ausgefuehrt.
 
 Das Studierendenmodell, CSV-Testdaten und wiederholbares Neuladen sind umgesetzt
 und gegen PostgreSQL 19rc1 geprueft (#18). Geprueft sind auch Constraints,
 Beziehungen, ID-Erzeugung, Loeschkaskaden und Rollback bei einem Importfehler.
-Als naechstes folgen die Drizzle-Anbindung (#19) und die lesende Studierenden-API (#20).
+Das Drizzle-Schema und seine Beziehungen sind aus der bestehenden Datenbank
+abgeleitet und lesend geprueft (#19, erstes Paket). Als naechstes folgen die
+DB-Anbindung der Anwendung, Repository und flexible Suche fuer #19, danach
+die lesende Studierenden-API (#20).
 Die lokalen Tests bilden nur den ersten Teil von Issue #25 ab; Integrationstests
 mit der vorgesehenen Datenbank-/Keycloak-Testumgebung folgen spaeter.
 
