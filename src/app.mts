@@ -11,7 +11,7 @@ import { responseTime } from './logger/response-time.mts';
 import { secureHeaders } from 'hono/secure-headers';
 
 /** App-Komposition ohne Serverstart oder Zugriff auf externe Dienste. */
-export const createApp = ({ config, logger, studentService }: Container): Hono => {
+export const createApp = ({ config, logger, studentService, database }: Container): Hono => {
     const app = new Hono();
     const httpLogger = logger.child({ module: 'http' });
 
@@ -21,7 +21,7 @@ export const createApp = ({ config, logger, studentService }: Container): Hono =
 
     app.route('/', createRootRouter());
     app.route('/rest', createStudentRouter(studentService));
-    app.route('/health', createHealthRouter());
+    app.route('/health', createHealthRouter(database.check, logger.child({ module: 'health' })));
 
     app.notFound((c) => c.json({ msg: 'Nicht gefunden' }, 404));
     // Hono erwartet hier einen Fehler-Callback.

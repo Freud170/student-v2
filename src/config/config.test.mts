@@ -10,6 +10,7 @@ describe('Konfiguration', () => {
         expect(config.log.level).toBe('info');
         expect(config.log.output).toBe('both');
         expect(config.cors.origins).toContain('https://localhost:5173');
+        expect(config.db.database).toBe('student');
     });
 
     test('fehlende optionale Abschnitte verwenden Defaults', () => {
@@ -33,6 +34,17 @@ describe('Konfiguration', () => {
         { cors: { origins: ['https://user:password@localhost:5173'] } },
         { cors: { origins: ['ftp://localhost'] } },
         { server: { port: -1 } },
+        { db: { host: ' ' } },
+        { db: { user: '' } },
+        { db: { database: '' } },
+        { db: { port: 0 } },
+        { db: { passwordFile: '' } },
+        { db: { caFile: '' } },
+        { db: { poolMax: 0 } },
+        { db: { poolMax: 1.5 } },
+        { db: { poolConnectionTimeoutMillis: 0 } },
+        { db: { poolIdleTimeoutMillis: -1 } },
+        { db: { queryTimeoutMillis: 0 } },
     ])('ungueltige Werte verhindern den Start: %j', (invalid) => {
         expect(() => ConfigSchema.parse({ server: {}, ...invalid })).toThrow(ZodError);
     });
