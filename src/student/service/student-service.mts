@@ -1,5 +1,6 @@
 import { type Suchparameter, SuchparameterSchema } from './suchparameter.mts';
 import { type Logger } from 'pino';
+import { NotFoundError } from './errors.mts';
 import { type Student } from '../entity/student.mts';
 import { type StudentRepository } from '../repository/student-repository.mts';
 import { z } from 'zod';
@@ -17,13 +18,33 @@ export class StudentService {
         this.#repository = repository;
     }
 
-    async findById(id: number): Promise<Student | undefined> {
+    /** @throws NotFoundError bei ungueltiger oder unbekannter ID */
+    async findById(id: number): Promise<Student> {
         this.#logger.debug('findById');
-        return await this.#repository.findById(idSchema.parse(id));
+        const result = idSchema.safeParse(id);
+        if (!result.success) {
+            throw new NotFoundError(`Ungueltige ID ${id}`);
+        }
+
+        const student = await this.#repository.findById(result.data);
+        if (student === undefined) {
+            throw new NotFoundError(`Es gibt keinen Studierenden mit der ID ${id}`);
+        }
+        return student;
     }
 
+    /** @throws NotFoundError bei ungueltigen Suchparametern oder ohne Treffer */
     async find(params: Suchparameter = {}): Promise<Student[]> {
         this.#logger.debug('find');
-        return await this.#repository.find(SuchparameterSchema.parse(params));
+        const result = SuchparameterSchema.safeParse(params);
+        if (!result.success) {
+            throw new NotFoundError('Ungueltige Suchparameter');
+        }
+
+        const students = await this.#repository.find(result.data);
+        if (students.length === 0) {
+            throw new NotFoundError('Keine Studierenden gefunden');
+        }
+        return students;
     }
 }
