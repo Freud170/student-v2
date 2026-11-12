@@ -260,6 +260,13 @@ Rolle. Paging, Schreibrouter, GraphQL und
 Keycloak-Anbindung folgen mit den jeweiligen Funktionen. `Student` bleibt das
 zentrale Aggregate mit Adresse (1:1) und Pruefungsleistungen (1:N).
 
+**Globale Fehlerbehandlung** (`src/error-handler.mts`, wie im Beispiel der Vorlesung):
+Der Service wirft eigene Fehlerklassen (`src/student/service/errors.mts`), Router
+fangen keine Fehler ab. `app.onError` bildet sie zentral ab: `NotFoundError` (unbekannte
+oder ungueltige ID, ungueltige Suchparameter, keine Treffer) → 404, `ZodError` → 422
+als Problem Details nach RFC 9457 (`application/problem+json`, fuer POST), alle anderen
+Fehler → 500 ohne interne Details (diese nur im Log). 412 und 428 folgen mit PUT.
+
 Die Health-Endpunkte liegen in einem eigenen Router unter `src/admin/` und
 durchlaufen dieselbe globale Middleware wie die anderen Routen. Liveness zeigt,
 dass die Anwendung Requests unabhaengig von der Datenbank beantworten kann.

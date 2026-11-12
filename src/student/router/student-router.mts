@@ -1,6 +1,5 @@
 import { Hono } from 'hono';
 import { type StudentService } from '../service/student-service.mts';
-import { ZodError } from 'zod';
 import { toStudentDTO } from './student-dto.mts';
 
 const NOT_MODIFIED = 304;
@@ -12,19 +11,7 @@ const acceptsJson = (accept: string | undefined): boolean => {
     return value.includes('*/*') || /json|html/u.test(value);
 };
 
-// Ungueltige Eingaben (ZodError aus dem Service) werden zu undefined, d.h. 404;
-// alle anderen Fehler, z.B. DB nicht erreichbar, werden weitergeworfen (500).
-const withoutZodError = async <T,>(promise: Promise<T>): Promise<T | undefined> => {
-    try {
-        return await promise;
-    } catch (err) {
-        if (err instanceof ZodError) {
-            return undefined;
-        }
-        throw err;
-    }
-};
-
+// Fehler wie NotFoundError wirft der Service; app.onError macht daraus den Statuscode.
 export const createStudentRouter = (service: Pick<StudentService, 'find' | 'findById'>): Hono => {
     const router = new Hono();
 
@@ -40,11 +27,7 @@ export const createStudentRouter = (service: Pick<StudentService, 'find' | 'find
             return c.notFound();
         }
 
-        // Zu grosse IDs lehnt der Service per Zod ab
-        const student = await withoutZodError(service.findById(Number(id)));
-        if (student === undefined) {
-            return c.notFound();
-        }
+        const student = await service.findById(Number(id));
 
         // ETag = Version in Anfuehrungszeichen, z.B. "0"; auch bei 304 mitsenden
         const etag = `"${student.version}"`;
@@ -63,11 +46,7 @@ export const createStudentRouter = (service: Pick<StudentService, 'find' | 'find
             return c.body(null, NOT_ACCEPTABLE);
         }
 
-        // Unbekannte oder ungueltige Suchparameter liefern wie im Prof-Beispiel 404
-        const students = await withoutZodError(service.find(c.req.query()));
-        if (students === undefined || students.length === 0) {
-            return c.notFound();
-        }
+        const students = await service.find(c.req.query());
         return c.json(students.map((student) => toStudentDTO(student)));
     });
 

@@ -1,8 +1,11 @@
 import { describe, expect, test, vi } from 'vitest';
+import { Hono } from 'hono';
+import { NotFoundError } from '../service/errors.mts';
 import { type Student } from '../entity/student.mts';
 import { type StudentService } from '../service/student-service.mts';
-import { ZodError } from 'zod';
+import { createErrorHandler } from '../../error-handler.mts';
 import { createStudentRouter } from './student-router.mts';
+import { pino } from 'pino';
 
 const NOT_MODIFIED = 304;
 const NOT_FOUND = 404;
@@ -24,13 +27,16 @@ const student: Student = {
     ],
 };
 
-// Der Router wird ohne App und ohne Datenbank mit einem Service-Mock getestet.
+// Der Router wird ohne Datenbank mit einem Service-Mock getestet, eingehaengt in eine
+// kleine App mit derselben globalen Fehlerbehandlung wie in app.mts.
 const setup = () => {
     const service = {
         findById: vi.fn<StudentService['findById']>().mockResolvedValue(student),
         find: vi.fn<StudentService['find']>().mockResolvedValue([student]),
     };
-    return { service, router: createStudentRouter(service) };
+    const router = new Hono().route('/', createStudentRouter(service));
+    router.onError(createErrorHandler(pino({ level: 'silent' })));
+    return { service, router };
 };
 
 describe('GET /:id', () => {
@@ -55,9 +61,9 @@ describe('GET /:id', () => {
         });
     });
 
-    test('unbekannte ID liefert 404', async () => {
+    test('NotFoundError aus dem Service liefert 404', async () => {
         const { router, service } = setup();
-        service.findById.mockResolvedValue(undefined);
+        service.findById.mockRejectedValue(new NotFoundError('unbekannt'));
         const response = await router.request('/999');
 
         expect(response.status).toBe(NOT_FOUND);
@@ -73,14 +79,6 @@ describe('GET /:id', () => {
             expect(service.findById).not.toHaveBeenCalled();
         },
     );
-
-    test('vom Service abgelehnte ID liefert 404', async () => {
-        const { router, service } = setup();
-        service.findById.mockRejectedValue(new ZodError([]));
-        const response = await router.request('/99999999999');
-
-        expect(response.status).toBe(NOT_FOUND);
-    });
 
     test('Accept ohne JSON liefert 406', async () => {
         const { router, service } = setup();
@@ -124,7 +122,7 @@ describe('GET /:id mit ETag', () => {
 
     test('unbekannte ID liefert auch mit If-None-Match 404', async () => {
         const { router, service } = setup();
-        service.findById.mockResolvedValue(undefined);
+        service.findById.mockRejectedValue(new NotFoundError('unbekannt'));
         const response = await router.request('/999', { headers: { 'If-None-Match': '"2"' } });
 
         expect(response.status).toBe(NOT_FOUND);
@@ -150,18 +148,10 @@ describe('GET / mit Query-Parametern', () => {
         expect(service.find).toHaveBeenCalledExactlyOnceWith({});
     });
 
-    test('keine Treffer liefern 404', async () => {
+    test('NotFoundError aus dem Service liefert 404', async () => {
         const { router, service } = setup();
-        service.find.mockResolvedValue([]);
+        service.find.mockRejectedValue(new NotFoundError('keine Treffer'));
         const response = await router.request('/?nachname=gibtsnicht');
-
-        expect(response.status).toBe(NOT_FOUND);
-    });
-
-    test('ungueltige Suchparameter liefern 404', async () => {
-        const { router, service } = setup();
-        service.find.mockRejectedValue(new ZodError([]));
-        const response = await router.request('/?matrikelnummer=12');
 
         expect(response.status).toBe(NOT_FOUND);
     });
@@ -171,8 +161,8 @@ describe('GET / mit Query-Parametern', () => {
         service.find.mockRejectedValue(new Error('DB weg'));
         const response = await router.request('/');
 
-        // Ohne App gibt es keinen onError-Handler: Hono antwortet selbst mit 500
         expect(response.status).toBe(500);
+        await expect(response.json()).resolves.toStrictEqual({ msg: 'Interner Serverfehler' });
     });
 
     test('Accept ohne JSON liefert 406', async () => {

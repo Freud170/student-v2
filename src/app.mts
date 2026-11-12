@@ -2,13 +2,15 @@ import { type Container } from './container.mts';
 import { Hono } from 'hono';
 import { compress } from 'hono/compress';
 import { cors } from 'hono/cors';
+import { createErrorHandler } from './error-handler.mts';
 import { createHealthRouter } from './admin/health-router.mts';
 import { createRootRouter } from './root-router.mts';
 import { createStudentRouter } from './student/router/student-router.mts';
 import { getCorsOptions } from './config/cors-options.mts';
 import { requestLogger } from './logger/request-logger.mts';
 import { responseTime } from './logger/response-time.mts';
-import { secureHeaders } from 'hono/secure-headers';
+// Wie im Beispiel der Vorlesung: app.mts setzt alles zusammen und braucht mehr Imports
+import { secureHeaders } from 'hono/secure-headers'; // oxlint-disable-line import/max-dependencies
 
 /** App-Komposition ohne Serverstart oder Zugriff auf externe Dienste. */
 export const createApp = ({ config, logger, studentService, database }: Container): Hono => {
@@ -24,11 +26,6 @@ export const createApp = ({ config, logger, studentService, database }: Containe
     app.route('/health', createHealthRouter(database.check, logger.child({ module: 'health' })));
 
     app.notFound((c) => c.json({ msg: 'Nicht gefunden' }, 404));
-    // Hono erwartet hier einen Fehler-Callback.
-    // oxlint-disable-next-line promise/prefer-await-to-callbacks
-    app.onError((err, c) => {
-        httpLogger.error({ err }, 'Interner Serverfehler');
-        return c.json({ msg: 'Interner Serverfehler' }, 500);
-    });
+    app.onError(createErrorHandler(httpLogger));
     return app;
 };
