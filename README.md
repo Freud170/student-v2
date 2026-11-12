@@ -238,15 +238,19 @@ werden explizit an die Router und Services uebergeben.
 | Route | Verhalten |
 |---|---|
 | `GET /` | Bestehendes `{"msg":"Hello World"}` |
-| `GET /rest` | `{"msg":"Hello Student"}` aus dem injizierten Student-Service |
+| `GET /rest/:id` | 200 mit Studierendem als JSON; unbekannte oder ungueltige ID: 404 |
+| `GET /rest?nachname=…` | 200 mit Liste der Treffer; ohne Parameter alle; keine Treffer oder ungueltige Parameter: 404 |
 | `GET /health/liveness` | Status 200 mit `{"status":"up"}` |
 | `GET /health/readiness` | `SELECT 1` erfolgreich: 200 mit `{"status":"up"}`; DB-Fehler: 503 mit `{"status":"down"}` |
 | `HEAD /`, `HEAD /rest` | Dieselben Statuscodes und Header, ohne Response-Body |
 | `HEAD /health/liveness`, `HEAD /health/readiness` | Dieselbe Pruefung und derselbe Status wie GET, ohne Response-Body |
 | Unbekannte Route | JSON mit Status 404 |
 
-`/rest` ist der Einstieg fuer die spaetere Studierenden-API, noch keine Suche und
-keine Liste von Studierenden. Lesende REST-Routen (#20), Schreibrouter, GraphQL und
+Suchparameter: `nachname`, `vorname` und `ort` (Teiltext, ohne Gross-/Kleinschreibung)
+sowie `matrikelnummer` (6 Ziffern), `email` und `plz` (5 Ziffern, jeweils exakt).
+Ein `Accept`-Header ohne JSON (z.B. `text/plain`) liefert 406. Die Antwort ist ein
+`StudentDTO` (`src/student/router/student-dto.mts`): Adresse und Pruefungsleistungen
+ohne interne IDs, Noten als Zahl. Paging, ETags, Schreibrouter, GraphQL und
 Keycloak-Anbindung folgen mit den jeweiligen Funktionen. `Student` bleibt das
 zentrale Aggregate mit Adresse (1:1) und Pruefungsleistungen (1:N).
 
