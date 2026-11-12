@@ -17,11 +17,6 @@ export class StudentService {
         this.#repository = repository;
     }
 
-    public hello(): { msg: string } {
-        this.#logger.debug('hello');
-        return { msg: 'Hello Student' };
-    }
-
     async findById(id: number): Promise<Student | undefined> {
         this.#logger.debug('findById');
         return await this.#repository.findById(idSchema.parse(id));
