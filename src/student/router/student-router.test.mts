@@ -4,6 +4,7 @@ import { type StudentService } from '../service/student-service.mts';
 import { ZodError } from 'zod';
 import { createStudentRouter } from './student-router.mts';
 
+const NOT_MODIFIED = 304;
 const NOT_FOUND = 404;
 const NOT_ACCEPTABLE = 406;
 
@@ -87,6 +88,47 @@ describe('GET /:id', () => {
 
         expect(response.status).toBe(NOT_ACCEPTABLE);
         expect(service.findById).not.toHaveBeenCalled();
+    });
+});
+
+describe('GET /:id mit ETag', () => {
+    test('Antwort enthaelt die Version als ETag', async () => {
+        const { router } = setup();
+        const response = await router.request('/1');
+
+        expect(response.status).toBe(200);
+        expect(response.headers.get('ETag')).toBe('"2"');
+    });
+
+    test('If-None-Match mit aktueller Version liefert 304 ohne Body', async () => {
+        const { router } = setup();
+        const response = await router.request('/1', { headers: { 'If-None-Match': '"2"' } });
+
+        expect(response.status).toBe(NOT_MODIFIED);
+        expect(response.headers.get('ETag')).toBe('"2"');
+        await expect(response.text()).resolves.toBe('');
+    });
+
+    test.each(['"1"', '2', '"3"'])(
+        'If-None-Match %s passt nicht zur Version: 200 mit Body',
+        async (ifNoneMatch) => {
+            const { router } = setup();
+            const response = await router.request('/1', {
+                headers: { 'If-None-Match': ifNoneMatch },
+            });
+
+            expect(response.status).toBe(200);
+            await expect(response.json()).resolves.toMatchObject({ id: 1, version: 2 });
+        },
+    );
+
+    test('unbekannte ID liefert auch mit If-None-Match 404', async () => {
+        const { router, service } = setup();
+        service.findById.mockResolvedValue(undefined);
+        const response = await router.request('/999', { headers: { 'If-None-Match': '"2"' } });
+
+        expect(response.status).toBe(NOT_FOUND);
+        expect(response.headers.get('ETag')).toBeNull();
     });
 });
 
