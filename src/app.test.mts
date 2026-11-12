@@ -1,5 +1,6 @@
 import { describe, expect, test, vi } from 'vitest';
 import { ConfigSchema } from './config/config.mts';
+import { type Student } from './student/entity/student.mts';
 import { createApp } from './app.mts';
 import { createContainer } from './container.mts';
 import { drizzle } from 'drizzle-orm/node-postgres';
@@ -7,6 +8,21 @@ import { pino } from 'pino';
 import { relations } from './db/relations.mts';
 
 const origin = 'https://localhost:5173';
+
+// Gelesenes Aggregate fuer Tests ohne Datenbank
+const student: Student = {
+    id: 1,
+    version: 0,
+    matrikelnummer: '123456',
+    nachname: 'Test',
+    vorname: 'Tina',
+    email: 'tina.test@h-ka.de',
+    username: 'tina',
+    erzeugt: new Date('2026-10-01T00:00:00Z'),
+    aktualisiert: new Date('2026-10-01T00:00:00Z'),
+    adresse: { id: 1, plz: '76133', ort: 'Karlsruhe', studentId: 1 },
+    pruefungsleistungen: [{ id: 1, modul: 'SWE', note: '1.3', semester: 'WS 2026', studentId: 1 }],
+};
 
 const setup = (level = 'debug') => {
     const lines: string[] = [];
@@ -23,28 +39,28 @@ const setup = (level = 'debug') => {
 
 describe('App und manuelle DI', () => {
     test('bestehender Einstieg und Student-Router sind getrennt erreichbar', async () => {
-        const { app } = setup();
+        const { app, container } = setup();
+        vi.spyOn(container.studentService, 'find').mockResolvedValue([student]);
         const hello = await app.request('/');
-        const student = await app.request('/rest');
+        const students = await app.request('/rest');
 
         expect(hello.status).toBe(200);
         await expect(hello.json()).resolves.toStrictEqual({ msg: 'Hello World' });
-        expect(student.status).toBe(200);
-        await expect(student.json()).resolves.toStrictEqual({ msg: 'Hello Student' });
+        expect(students.status).toBe(200);
+        await expect(students.json()).resolves.toMatchObject([{ id: 1, nachname: 'Test' }]);
     });
 
     test('Requests verwenden dieselbe injizierte Service-Instanz', async () => {
         const { app, container } = setup();
-        const hello = vi.spyOn(container.studentService, 'hello');
-        hello.mockReturnValue({ msg: 'Injizierter Service' });
+        const find = vi.spyOn(container.studentService, 'find').mockResolvedValue([student]);
 
         const first = await app.request('/rest');
         const second = await app.request('/rest');
 
-        await expect(first.json()).resolves.toStrictEqual({ msg: 'Injizierter Service' });
-        await expect(second.json()).resolves.toStrictEqual({ msg: 'Injizierter Service' });
+        expect(first.status).toBe(200);
+        expect(second.status).toBe(200);
         const requestCount = 2;
-        expect(hello).toHaveBeenCalledTimes(requestCount);
+        expect(find).toHaveBeenCalledTimes(requestCount);
     });
 
     test('unbekannte Routen liefern JSON mit Status 404', async () => {
@@ -111,9 +127,9 @@ describe('HTTP-Middleware', () => {
 
     test('Fehler bleiben intern und durchlaufen dieselbe Middleware', async () => {
         const { app, container, lines } = setup();
-        vi.spyOn(container.studentService, 'hello').mockImplementation(() => {
-            throw new Error('Interne Fehlerdetails');
-        });
+        vi.spyOn(container.studentService, 'find').mockRejectedValue(
+            new Error('Interne Fehlerdetails'),
+        );
         const response = await app.request('/rest', { headers: { Origin: origin } });
 
         expect(response.status).toBe(500);
@@ -192,7 +208,7 @@ describe('CORS', () => {
 describe('Kompression', () => {
     test('gzip-Antwort bleibt nach dem Entpacken lesbares JSON', async () => {
         const { app } = setup();
-        const response = await app.request('/rest', {
+        const response = await app.request('/', {
             headers: { 'Accept-Encoding': 'gzip', Origin: origin },
         });
         const compressed = new Blob([await response.arrayBuffer()]);
@@ -203,20 +219,20 @@ describe('Kompression', () => {
         expect(response.headers.get('Content-Encoding')).toBe('gzip');
         expect(response.headers.get('Vary')).toContain('Accept-Encoding');
         expect(response.headers.get('Vary')).toContain('Origin');
-        await expect(decoded.json()).resolves.toStrictEqual({ msg: 'Hello Student' });
+        await expect(decoded.json()).resolves.toStrictEqual({ msg: 'Hello World' });
     });
 
     test.each(['identity', 'gzip;q=0'])('keine Kompression bei %s', async (encoding) => {
         const { app } = setup();
-        const response = await app.request('/rest', { headers: { 'Accept-Encoding': encoding } });
+        const response = await app.request('/', { headers: { 'Accept-Encoding': encoding } });
 
         expect(response.headers.get('Content-Encoding')).toBeNull();
-        await expect(response.json()).resolves.toStrictEqual({ msg: 'Hello Student' });
+        await expect(response.json()).resolves.toStrictEqual({ msg: 'Hello World' });
     });
 
     test('HEAD liefert auch bei gzip keinen Body', async () => {
         const { app } = setup();
-        const response = await app.request('/rest', {
+        const response = await app.request('/', {
             method: 'HEAD',
             headers: { 'Accept-Encoding': 'gzip' },
         });
