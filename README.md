@@ -382,6 +382,21 @@ pnpm run sonar            # in einer zweiten PowerShell, nach Neustart von Termi
 
 Das Ergebnis steht danach unter <http://localhost:9000>. Beenden mit `docker compose down`.
 
+## Bruno
+
+Die Collection `extras/bruno/student` (Format „OpenCollection“ wie im Beispiel der
+Vorlesung) enthaelt Requests mit Assertions fuer Health, Suche mit ID (inkl. ETag und
+406), Suche mit Suchparametern und Neuanlegen (inkl. 400 und 422). Voraussetzung:
+PostgreSQL und die Anwendung laufen (`docker compose up -d` in
+`extras\compose\postgres`, dann `pnpm run dev`).
+
+In Bruno die Collection ueber *Open Collection* oeffnen und z.B. per Rechtsklick
+*Run* alle Requests ausfuehren. Fuer das selbstsignierte Zertifikat die Option
+*SSL/TLS Certificate Verification* ausschalten. „Neuer Student“ gelingt nur einmal;
+danach die Testdaten zuruecksetzen (`reset-data.sql`, siehe
+[extras/compose/postgres/ReadMe.md](extras/compose/postgres/ReadMe.md)). Requests mit
+Authentifizierung (Keycloak), PUT, DELETE und GraphQL folgen mit den Funktionen.
+
 ## Abhängigkeiten und Sicherheitslücken
 
 ```powershell
@@ -447,8 +462,11 @@ Beziehungen, ID-Erzeugung, Loeschkaskaden und Rollback bei einem Importfehler.
 Das Drizzle-Schema und seine Beziehungen sind aus der bestehenden Datenbank
 abgeleitet und lesend geprueft (#19). DB-Konfiguration, TLS-Pool, manuelle DI,
 geordnetes Schliessen, Fetch-Joins, Aggregate-Abbildung, flexible Suche,
-Service-Validierung und DB-Readiness sind umgesetzt. Als naechstes folgt
-die lesende Studierenden-API (#20).
+Service-Validierung und DB-Readiness sind umgesetzt. Die REST-Schnittstelle bietet
+Suche mit ID (inkl. ETag/304) und mit Suchparametern (#20, #21), eine globale
+Fehlerbehandlung mit Problem Details (#22) und Neuanlegen per POST mit Zod (#23).
+Eine Bruno-Collection prueft diese Endpunkte (#24). Als naechstes folgen Unit- und
+Integrationstests (#25) und CI mit GitHub Actions (#26).
 Die lokalen Tests bilden nur den ersten Teil von Issue #25 ab; Integrationstests
 mit der vorgesehenen Datenbank-/Keycloak-Testumgebung folgen spaeter.
 
