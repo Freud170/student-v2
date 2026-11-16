@@ -1,7 +1,7 @@
 opencollection: 1.0.0
 
 info:
-  name: student
+  name: student-v2
 config:
   proxy:
     inherit: true

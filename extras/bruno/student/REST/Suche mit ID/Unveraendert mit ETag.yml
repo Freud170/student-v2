@@ -22,9 +22,10 @@ runtime:
     - expression: res.status
       operator: eq
       value: "304"
+    # Bruno entfernt bei "eq" die Anfuehrungszeichen, deshalb Vergleich per Regex
     - expression: res.headers['etag']
-      operator: eq
-      value: '"0"'
+      operator: matches
+      value: '^"0"$'
 
 settings:
   encodeUrl: true
