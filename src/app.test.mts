@@ -8,6 +8,7 @@ import { pino } from 'pino';
 import { relations } from './db/relations.mts';
 
 const origin = 'https://localhost:5173';
+const BAD_REQUEST = 400;
 
 // Gelesenes Aggregate fuer Tests ohne Datenbank
 const student: Student = {
@@ -151,8 +152,9 @@ describe('HTTP-Middleware', () => {
         });
 
         expect(lines.join('')).not.toContain('secret');
+        // "body-secret" ist kein JSON: POST /rest antwortet mit 400
         expect(lines.map((line): unknown => JSON.parse(line))).toContainEqual(
-            expect.objectContaining({ method: 'POST', path: '/rest', status: 404 }),
+            expect.objectContaining({ method: 'POST', path: '/rest', status: BAD_REQUEST }),
         );
     });
 
@@ -198,7 +200,7 @@ describe('CORS', () => {
         });
 
         expect(response.status).toBe(204);
-        expect(response.headers.get('Access-Control-Allow-Methods')).toBe('GET,HEAD');
+        expect(response.headers.get('Access-Control-Allow-Methods')).toBe('GET,HEAD,POST');
         expect(response.headers.get('Access-Control-Allow-Headers')).toContain('Authorization');
         expect(response.headers.get('Access-Control-Allow-Headers')).not.toContain('X-Untrusted');
         await expect(response.text()).resolves.toBe('');
