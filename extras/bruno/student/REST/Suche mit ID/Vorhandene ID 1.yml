@@ -1,0 +1,49 @@
+info:
+  name: Vorhandene ID 1
+  type: http
+  seq: 1
+
+http:
+  method: GET
+  url: "{{restUrl}}/:id"
+  headers:
+    - name: Accept
+      value: application/json
+  params:
+    - name: id
+      value: "1"
+      type: path
+  auth: inherit
+
+runtime:
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "200"
+    - expression: res.headers['etag']
+      operator: matches
+      value: '^(W\/)?"0"$'
+    - expression: res.headers['content-type']
+      operator: matches
+      value: ^application\/json
+    - expression: res.body.id
+      operator: eq
+      value: "1"
+    - expression: res.body.nachname
+      operator: eq
+      value: Mustermann
+    - expression: res.body.adresse.ort
+      operator: eq
+      value: Karlsruhe
+    - expression: res.body.pruefungsleistungen
+      operator: length
+      value: "2"
+    - expression: res.body.pruefungsleistungen[0].note
+      operator: eq
+      value: "1.3"
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
