@@ -1,0 +1,13 @@
+info:
+  name: Suche mit Suchparameter
+  type: folder
+  seq: 2
+
+request:
+  auth: inherit
+
+docs:
+  content: >-
+    Suche nach Studierenden über die REST-Schnittstelle mit Query-Parametern. Die Antwort
+    ist ein JSON-Array; keine Treffer oder ungültige Suchparameter liefern 404.
+  type: text/markdown

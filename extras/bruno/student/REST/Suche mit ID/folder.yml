@@ -1,0 +1,13 @@
+info:
+  name: Suche mit ID
+  type: folder
+  seq: 1
+
+request:
+  auth: inherit
+
+docs:
+  content: >-
+    Suche nach Studierenden über die REST-Schnittstelle anhand der ID. Der ETag ist die
+    Version; bei gzip-komprimierten Antworten kommt er als schwaches ETag W/"0".
+  type: text/markdown

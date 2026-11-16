@@ -1,0 +1,14 @@
+info:
+  name: Neu anlegen
+  type: folder
+  seq: 3
+
+request:
+  auth: inherit
+
+docs:
+  content: >-
+    Neue Studierende per POST anlegen. "Neuer Student" klappt nur einmal; danach existiert
+    die Matrikelnummer 777777 und es folgt 422. Testdaten zuruecksetzen siehe
+    extras/compose/postgres/ReadMe.md (reset-data.sql).
+  type: text/markdown
