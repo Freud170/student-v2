@@ -5,12 +5,58 @@ import { type Student } from '../entity/student.mts';
 import { type Suchparameter } from '../service/suchparameter.mts';
 import { buildWhere } from './build-where.mts';
 
+// Daten fuer INSERT ohne generierte Spalten (id, version) und ohne Fremdschluessel
+export type StudentCreate = {
+    student: Omit<typeof studentTable.$inferInsert, 'id' | 'version'>;
+    adresse: Omit<typeof adresseTable.$inferInsert, 'id' | 'studentId'>;
+    pruefungsleistungen: Omit<typeof pruefungsleistungTable.$inferInsert, 'id' | 'studentId'>[];
+};
+
+// Spalten, die eindeutig sein muessen (UNIQUE bzw. fachlich eindeutig)
+export type UniqueSpalte = 'email' | 'matrikelnummer' | 'username';
+
 /** Persistenzzugriff auf das Student-Aggregate ueber den gemeinsamen Drizzle-Client. */
 export class StudentRepository {
     readonly #db: Database['db'];
 
     constructor(db: Database['db']) {
         this.#db = db;
+    }
+
+    /** Legt Student, Adresse und Pruefungsleistungen in einer Transaktion an. */
+    async create({ student, adresse, pruefungsleistungen }: StudentCreate): Promise<number> {
+        // Schlaegt ein INSERT fehl, wird die ganze Transaktion zurueckgerollt.
+        return await this.#db.transaction(async (tx) => {
+            const [row] = await tx
+                .insert(studentTable)
+                .values(student)
+                .returning({ id: studentTable.id });
+            if (row === undefined) {
+                throw new Error('Der Studierende wurde nicht angelegt.');
+            }
+            const studentId = row.id;
+
+            await tx.insert(adresseTable).values({ ...adresse, studentId });
+            // Ein INSERT mit leerer Werteliste waere ungueltiges SQL
+            if (pruefungsleistungen.length > 0) {
+                await tx.insert(pruefungsleistungTable).values(
+                    pruefungsleistungen.map((leistung) => {
+                        return { ...leistung, studentId };
+                    }),
+                );
+            }
+            return studentId;
+        });
+    }
+
+    /** Gibt es bereits einen Studierenden mit diesem Wert, z.B. dieser Email? */
+    async existsBy(spalte: UniqueSpalte, wert: string): Promise<boolean> {
+        const [row] = await this.#db
+            .select({ id: studentTable.id })
+            .from(studentTable)
+            .where(eq(studentTable[spalte], wert))
+            .limit(1);
+        return row !== undefined;
     }
 
     async findById(id: number): Promise<Student | undefined> {
