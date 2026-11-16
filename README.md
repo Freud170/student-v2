@@ -241,6 +241,7 @@ werden explizit an die Router und Services uebergeben.
 | `GET /rest/:id` | 200 mit Studierendem als JSON und `ETag` (Version); unbekannte oder ungueltige ID: 404 |
 | `GET /rest/:id` mit `If-None-Match` | Version unveraendert: 304 ohne Body |
 | `GET /rest?nachname=…` | 200 mit Liste der Treffer; ohne Parameter alle; keine Treffer oder ungueltige Parameter: 404 |
+| `POST /rest` | 201 mit `Location`-Header (ohne Body); ungueltige Daten oder vergebene Matrikelnummer/Email/Username: 422; kein JSON: 400 |
 | `GET /health/liveness` | Status 200 mit `{"status":"up"}` |
 | `GET /health/readiness` | `SELECT 1` erfolgreich: 200 mit `{"status":"up"}`; DB-Fehler: 503 mit `{"status":"down"}` |
 | `HEAD /`, `HEAD /rest` | Dieselben Statuscodes und Header, ohne Response-Body |
@@ -256,16 +257,41 @@ z.B. `"0"`. `If-None-Match` wird wie im Beispiel der Vorlesung exakt verglichen.
 Bekannte Einschränkung: Bei gzip-komprimierten Antworten macht `hono/compress` daraus
 ein schwaches `W/"0"`; sendet ein Client das zurück (z.B. ein Browser), gibt es 200
 statt 304. Für Tests mit Bruno und Vitest (`If-None-Match: "0"`) spielt das keine
-Rolle. Paging, Schreibrouter, GraphQL und
+Rolle. Paging, PUT, DELETE, GraphQL und
 Keycloak-Anbindung folgen mit den jeweiligen Funktionen. `Student` bleibt das
 zentrale Aggregate mit Adresse (1:1) und Pruefungsleistungen (1:N).
+
+**Neuanlegen mit POST:** Der Request-Body wird mit Zod geprueft
+(`src/student/validation/student-validation.mts`, unbekannte Felder werden abgelehnt):
+
+```json
+{
+  "matrikelnummer": "777777",
+  "nachname": "Neu",
+  "vorname": "Nora",
+  "email": "nora.neu@h-ka.de",
+  "username": "nora",
+  "adresse": { "plz": "76133", "ort": "Karlsruhe" },
+  "pruefungsleistungen": [{ "modul": "Softwareengineering", "note": 1.3, "semester": "WS 2026/27" }]
+}
+```
+
+Matrikelnummer 6 Ziffern, Namen mit grossem Anfangsbuchstaben (auch Doppelnamen),
+gueltige Email, Username 1–20 Zeichen, PLZ 5 Ziffern, Noten nur 1.0 bis 4.0 in den
+ueblichen Stufen sowie 5.0, Semester wie `WS 2026/27` oder `SS 2026`; die Liste der
+Pruefungsleistungen darf leer sein. Der `StudentWriteService` prueft vorab, ob
+Matrikelnummer, Email oder Username schon vergeben sind (`UniqueError`), und legt
+Studierenden, Adresse und Leistungen ueber das Repository in einer Transaktion an.
+`erzeugt` und `aktualisiert` setzt der Service. POST ist noch nicht durch Keycloak
+geschuetzt; Rollen folgen mit #30/#31.
 
 **Globale Fehlerbehandlung** (`src/error-handler.mts`, wie im Beispiel der Vorlesung):
 Der Service wirft eigene Fehlerklassen (`src/student/service/errors.mts`), Router
 fangen keine Fehler ab. `app.onError` bildet sie zentral ab: `NotFoundError` (unbekannte
-oder ungueltige ID, ungueltige Suchparameter, keine Treffer) → 404, `ZodError` → 422
-als Problem Details nach RFC 9457 (`application/problem+json`, fuer POST), alle anderen
-Fehler → 500 ohne interne Details (diese nur im Log). 412 und 428 folgen mit PUT.
+oder ungueltige ID, ungueltige Suchparameter, keine Treffer) → 404, `ZodError` und
+`UniqueError` → 422 als Problem Details nach RFC 9457 (`application/problem+json`),
+alle anderen Fehler → 500 ohne interne Details (diese nur im Log). Kein gueltiges
+JSON im POST-Body beantwortet der Router selbst mit 400. 412 und 428 folgen mit PUT.
 
 Die Health-Endpunkte liegen in einem eigenen Router unter `src/admin/` und
 durchlaufen dieselbe globale Middleware wie die anderen Routen. Liveness zeigt,
