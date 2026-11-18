@@ -33,3 +33,8 @@ poolMax = 5
 poolIdleTimeoutMillis = 30000
 poolConnectionTimeoutMillis = 5000
 queryTimeoutMillis = 5000
+# Nur in der Entwicklung: DB per QUERY /dev/db_populate neu laden (Tabellen neu
+# anlegen und CSV-Testdaten importieren). COPY erfordert den Superuser.
+populate = true
+admin = "postgres"
+adminPasswordFile = "extras/compose/postgres/password.txt"

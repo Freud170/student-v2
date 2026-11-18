@@ -4,7 +4,13 @@
     "@tsconfig/node26/tsconfig",
     "@tsconfig/node-ts"
   ],
-  "include": ["src/**/*", "scripts/*", "*.mts", "drizzle.config.ts"],
+  "include": [
+    "src/**/*",
+    "test/**/*",
+    "scripts/*",
+    "*.mts",
+    "drizzle.config.ts"
+  ],
   "compilerOptions": {
     "module": "nodenext",
     "moduleResolution": "nodenext",
