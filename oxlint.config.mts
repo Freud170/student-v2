@@ -392,7 +392,7 @@ export default defineConfig({
             },
         },
         {
-            files: ['src/**/*.test.mts', 'test/integration/*/*.test.mts'],
+            files: ['src/**/*.test.mts', 'test/integration/**/*.test.mts'],
 
             plugins: ['vitest', 'import'],
             rules: {
