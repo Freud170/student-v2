@@ -1,5 +1,7 @@
 # Student
 
+[![CI](https://github.com/Freud170/student-v2/actions/workflows/ci.yml/badge.svg)](https://github.com/Freud170/student-v2/actions/workflows/ci.yml)
+
 Appserver mit Hono zur Verwaltung von Studierendendaten (Aufgabe 3 im Modul
 Software Engineering, Hochschule Karlsruhe).
 
@@ -468,6 +470,11 @@ gemergt.
 Commit-Messages auf Englisch nach [Conventional Commits](https://www.conventionalcommits.org)
 (`feat:`, `fix:`, `docs:`, `chore:` …).
 
+**CI mit GitHub Actions** (`.github/workflows/ci.yml`): Bei jedem Push und Pull Request
+laufen `pnpm install --frozen-lockfile`, Oxfmt (`fmt:check`), Oxlint, `tsc` und die
+Unit-Tests. Die Actions sind per Commit-SHA eingebunden. Integrationstests brauchen App
+und PostgreSQL und laufen nur lokal (wie in Aufgabe 1).
+
 ## Stand
 
 Die Hono-Anwendungsbasis mit HTTPS, Router-/Service-Trennung, manueller DI,
@@ -491,7 +498,8 @@ Suche mit ID (inkl. ETag/304) und mit Suchparametern (#20, #21), eine globale
 Fehlerbehandlung mit Problem Details (#22) und Neuanlegen per POST mit Zod (#23).
 Eine Bruno-Collection prueft diese Endpunkte (#24). Unit-Tests und Integrationstests
 mit `fetch` gegen App und PostgreSQL laufen mit Vitest; die DB wird vorher ueber den
-Dev-Endpunkt neu geladen (#25). Als naechstes folgt CI mit GitHub Actions (#26).
+Dev-Endpunkt neu geladen (#25). GitHub Actions prueft jeden Push mit Oxfmt, Oxlint,
+`tsc` und den Unit-Tests (#26).
 
 ## Team
 
