@@ -1,0 +1,13 @@
+info:
+  name: Dev
+  type: folder
+  seq: 3
+
+request:
+  auth: inherit
+
+docs:
+  content: >-
+    Nur in der Entwicklung (populate = true in config.toml): Tabellen neu anlegen und die
+    CSV-Testdaten laden, z.B. vor "Neuer Student".
+  type: text/markdown

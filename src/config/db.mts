@@ -12,21 +12,25 @@ export type Database = {
     close: () => Promise<void>;
 };
 
-/** Ein Pool pro Anwendung; Verbindungen entstehen erst bei der ersten Abfrage. */
-export const createDatabase = async (config: DbConfig, logger: Logger): Promise<Database> => {
+/** Pool mit TLS fuer einen DB-User; das Passwort wird aus der angegebenen Datei gelesen. */
+export const createPool = async (
+    config: DbConfig,
+    user: string,
+    passwordFile: string,
+): Promise<Pool> => {
     const [passwordText, ca] = await Promise.all([
-        readFile(config.passwordFile, 'utf8'),
+        readFile(passwordFile, 'utf8'),
         readFile(config.caFile),
     ]);
     const password = passwordText.trim();
     if (password === '') {
         throw new Error('Die DB-Passwortdatei ist leer.');
     }
-    const pool = new Pool({
+    return new Pool({
         host: config.host,
         port: config.port,
         database: config.database,
-        user: config.user,
+        user,
         password,
         ssl: { ca, rejectUnauthorized: true, minVersion: 'TLSv1.3', maxVersion: 'TLSv1.3' },
         sslnegotiation: 'direct',
@@ -35,6 +39,11 @@ export const createDatabase = async (config: DbConfig, logger: Logger): Promise<
         connectionTimeoutMillis: config.poolConnectionTimeoutMillis,
         query_timeout: config.queryTimeoutMillis,
     });
+};
+
+/** Ein Pool pro Anwendung; Verbindungen entstehen erst bei der ersten Abfrage. */
+export const createDatabase = async (config: DbConfig, logger: Logger): Promise<Database> => {
+    const pool = await createPool(config, config.user, config.passwordFile);
     // Idle-Verbindungsfehler duerfen weder den Prozess beenden noch Zugangsdaten loggen.
     pool.on('error', () => logger.error('Fehler einer unbenutzten DB-Verbindung.'));
     const db = drizzle({ client: pool, relations, logger: false });

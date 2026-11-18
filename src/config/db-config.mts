@@ -36,6 +36,15 @@ export const DbConfigSchema = z.object({
         .max(MAX_TIMEOUT)
         .default(DEFAULT_CONNECTION_TIMEOUT),
     queryTimeoutMillis: z.number().int().min(1).max(MAX_TIMEOUT).default(DEFAULT_QUERY_TIMEOUT),
+    // Neuladen der DB in der Entwicklung (QUERY /dev/db_populate), standardmaessig aus
+    populate: z.boolean().default(false),
+    // Superuser fuer COPY ... FROM beim Neuladen; Passwort ebenfalls aus einer Datei
+    admin: z.string().trim().min(1).default('postgres'),
+    adminPasswordFile: z
+        .string()
+        .trim()
+        .min(1)
+        .default(fileURLToPath(new URL('password.txt', postgresURL))),
 });
 
 export type DbConfig = z.infer<typeof DbConfigSchema>;
