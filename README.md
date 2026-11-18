@@ -343,8 +343,31 @@ Request-Bodies, Query-Werte, Cookies und Authorization-Header werden nicht gelog
 pnpm run fmt          # Formatieren mit Oxfmt (fmt:check prüft nur)
 pnpm run lint         # Codeanalyse mit Oxlint (lint:fix korrigiert, was geht)
 pnpm run typecheck    # TypeScript-Pruefung ohne Ausgabe von Build-Dateien
-pnpm run test:run     # Vitest einmalig; pnpm test fuer den Watch-Modus
+pnpm run test:run     # Unit-Tests einmalig; pnpm test fuer den Watch-Modus
 ```
+
+Vitest hat zwei Projekte (`vitest.config.mts`): **unit** (`src/**/*.test.mts`, ohne
+laufende App oder Datenbank) und **integration** (`test/integration/**`, HTTP-Requests
+mit `fetch` gegen die laufende App und PostgreSQL):
+
+```powershell
+cd extras\compose\postgres
+docker compose up -d            # PostgreSQL starten
+cd ..\..\..
+pnpm run dev                    # App starten (eigene PowerShell)
+pnpm run test:integration       # in einer zweiten PowerShell
+# danach App mit Strg+C beenden und in extras\compose\postgres: docker compose down
+```
+
+Vor den Integrationstests laedt `test/integration/setup.global.mts` die DB per
+`QUERY /dev/db_populate` neu (Tabellen neu anlegen, CSV-Testdaten importieren); jeder
+Lauf beginnt also mit denselben Daten. Der Dev-Endpunkt existiert nur mit
+`populate = true` in `[db]` von `config.toml` und nutzt fuer `COPY` den Superuser
+`postgres` ueber eine kurzlebige eigene Verbindung (`src/config/dev/db-populate.mts`).
+Er ist noch nicht durch Keycloak geschuetzt (folgt mit #31). Fuer das selbstsignierte
+Zertifikat setzt `vitest.config.mts` `NODE_TLS_REJECT_UNAUTHORIZED=0` im Testprozess.
+Die Testdateien laufen parallel; Tests, die Daten anlegen, verwenden deshalb Werte,
+die keine Suche der anderen Tests treffen.
 
 Die Tests pruefen App-Komposition, Health-Endpunkte, Middleware, Konfiguration,
 Pino-Ausgabe sowie DB-Pool-Konfiguration, Server-Lebenszyklus, Service und Repository.
@@ -357,8 +380,8 @@ Ergebnisabbildung laufen mit Drizzle. Sie pruefen Aggregate, Parametrisierung,
 LEFT JOINs ohne LIMIT, alle Suchfilter und die Weitergabe von DB-Fehlern.
 Service-Tests pruefen Validierung vor dem DB-Zugriff; Health-Tests pruefen
 DB-Ausfall und Erholung sowie die unabhaengige Liveness.
-Automatisierte Tests gegen PostgreSQL/Keycloak, Bruno und Lasttests
-sind noch nicht eingerichtet.
+Integrationstests decken Health, Suche mit ID (inkl. ETag), Suche mit Suchparametern
+und POST ab; Tests mit Keycloak und Lasttests folgen.
 
 Die Regeln für Oxlint stehen in `oxlint.config.mts`; alle Kategorien sind als
 Fehler eingestellt, inklusive Typprüfung.
@@ -393,7 +416,8 @@ PostgreSQL und die Anwendung laufen (`docker compose up -d` in
 In Bruno die Collection ueber *Open Collection* oeffnen und z.B. per Rechtsklick
 *Run* alle Requests ausfuehren. Fuer das selbstsignierte Zertifikat die Option
 *SSL/TLS Certificate Verification* ausschalten. „Neuer Student“ gelingt nur einmal;
-danach die Testdaten zuruecksetzen (`reset-data.sql`, siehe
+danach die Testdaten mit **Dev > DB neu laden** (`QUERY /dev/db_populate`) oder per
+`reset-data.sql` zuruecksetzen (siehe
 [extras/compose/postgres/ReadMe.md](extras/compose/postgres/ReadMe.md)). Requests mit
 Authentifizierung (Keycloak), PUT, DELETE und GraphQL folgen mit den Funktionen.
 
@@ -465,10 +489,9 @@ geordnetes Schliessen, Fetch-Joins, Aggregate-Abbildung, flexible Suche,
 Service-Validierung und DB-Readiness sind umgesetzt. Die REST-Schnittstelle bietet
 Suche mit ID (inkl. ETag/304) und mit Suchparametern (#20, #21), eine globale
 Fehlerbehandlung mit Problem Details (#22) und Neuanlegen per POST mit Zod (#23).
-Eine Bruno-Collection prueft diese Endpunkte (#24). Als naechstes folgen Unit- und
-Integrationstests (#25) und CI mit GitHub Actions (#26).
-Die lokalen Tests bilden nur den ersten Teil von Issue #25 ab; Integrationstests
-mit der vorgesehenen Datenbank-/Keycloak-Testumgebung folgen spaeter.
+Eine Bruno-Collection prueft diese Endpunkte (#24). Unit-Tests und Integrationstests
+mit `fetch` gegen App und PostgreSQL laufen mit Vitest; die DB wird vorher ueber den
+Dev-Endpunkt neu geladen (#25). Als naechstes folgt CI mit GitHub Actions (#26).
 
 ## Team
 
