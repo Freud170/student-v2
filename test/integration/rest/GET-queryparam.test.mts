@@ -4,7 +4,9 @@ import { restURL } from '../constants.mts';
 // -----------------------------------------------------------------------------
 // T e s t d a t e n   (aus den CSV-Dateien, siehe setup.global.mts)
 // -----------------------------------------------------------------------------
-const ANZAHL_TESTDATEN = 5;
+// IDs der 5 Studierenden in student.csv
+// oxlint-disable-next-line no-magic-numbers
+const IDS_TESTDATEN = [1, 20, 30, 40, 50];
 const NOT_FOUND = 404;
 const teilNachnamen = [
     { suche: 'muster', anzahl: 2 },
@@ -37,7 +39,10 @@ describe('GET /rest mit Query-Parametern', () => {
         // then
         expect(response.status).toBe(200);
         const body = (await response.json()) as StudentResponse[];
-        expect(body).toHaveLength(ANZAHL_TESTDATEN);
+        // POST.test.mts laeuft parallel und kann einen weiteren Datensatz anlegen
+        expect(body.map((student) => student.id)).toStrictEqual(
+            expect.arrayContaining(IDS_TESTDATEN),
+        );
     });
 
     test.concurrent.each(teilNachnamen)(
