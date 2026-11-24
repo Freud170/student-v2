@@ -630,7 +630,7 @@ CORS erlaubt `Content-Encoding`, damit auch Browser die Antwort erhalten.
 Lokale Tests pruefen echte gzip-Bytes, ungelesene Bodies und ausbleibende
 Service-Aufrufe. Integrationstests senden echte gzip-Bytes an POST und PUT und
 pruefen 415 ohne Datenveraenderung sowie erfolgreiche Requests mit `identity`.
-Die entsprechenden Bruno-Pruefungen stehen noch aus.
+Die Bruno-Collection prueft ebenfalls gzip-Ablehnung und erlaubte identity-Bodies.
 
 `X-Response-Time` misst die Bearbeitungszeit bis zur fertigen Response, ohne die
 anschliessende Netzwerkuebertragung. Fehler und Preflights werden ebenfalls
@@ -763,7 +763,8 @@ Das Ergebnis steht danach unter <http://localhost:9000>. Beenden mit `docker com
 
 Die Collection `extras/bruno/student` (Format „OpenCollection“)
 enthaelt Requests mit Assertions fuer Health, Suche mit ID (inkl. ETag und
-406), Suche mit Suchparametern und Neuanlegen (inkl. 400 und 422).
+406), Suche mit Suchparametern, Neuanlegen (inkl. 400 und 422), PUT mit
+Versionsschutz und die Ablehnung komprimierter Request-Bodies.
 Lese- und Health-Requests bleiben ohne Token nutzbar. Die komplette Collection
 benoetigt dieselbe lokale Testumgebung wie die Integrationstests: Backend mit
 RC1 und Keycloak, lokale App mit `populate = true`. Der App-Container hat keinen
@@ -776,7 +777,7 @@ In der App die Collection ueber *Open Collection* oeffnen und das vorhandene
 Die Reihenfolge fuer einen vollstaendigen Lauf ist:
 **Keycloak → Dev → Health → REST → Security → Abschluss**.
 Die beiden Token-Anfragen setzen nur Laufzeitvariablen mit `bru.setVar`.
-POST erbt das Admin-Token; die Security-Anfragen pruefen zusaetzlich `student`
+Die POST-Anfragen unter `Neu anlegen` erben das Admin-Token; die Security-Anfragen pruefen zusaetzlich `student`
 sowie fehlende und ungueltige Tokens. Abschluss stellt die CSV-Fixtures wieder
 her, meldet beide Sitzungen ab und leert die Token-Variablen. Bei manuellen
 Einzelanfragen ebenfalls abschliessend diesen Ordner ausfuehren. Nach einem
@@ -791,8 +792,21 @@ Pop-Location
 ```
 
 Keine ausfuehrlichen Reports mit Token-Antworten oder Login-Formularen speichern.
-Der Test „kein JSON“ sendet absichtlich rohe Bytes, damit der HTTP-Client daraus
-keinen gueltigen JSON-String erzeugt. Die PUT-Faelle fuer Bruno stehen noch aus;
+Die Tests „kein JSON“ senden absichtlich rohe Bytes, damit der HTTP-Client daraus
+keinen gueltigen JSON-String erzeugt.
+
+`REST/Aendern` ist eine zusammenhaengende Folge von 18 Requests: eigener
+Teststudent mit Matrikelnummer 777779, GET mit `Accept-Encoding: identity` fuer
+einen starken ETag, PUT mit diesem ETag und anschliessende Kontrolle. URL und
+ETag kommen aus den Antworten und liegen ausschliesslich in Laufzeitvariablen.
+Admin aendert Adresse und Leistungen, `student` leert spaeter die Leistungsliste.
+Die Folge prueft 400/401/404/412/422/428 und gzip-Ablehnung mit 415 bei POST/PUT.
+Ein GET nach den Fehlerfaellen vergleicht das vollstaendige Aggregate einschliesslich
+Version und Zeitstempeln mit dem zuletzt gespeicherten Stand. Die gzip-Faelle
+senden vorbereitete komprimierte Bytes des gueltigen PUT-Bodies als Buffer.
+POST und PUT mit `Content-Encoding: identity` bleiben erfolgreich. Abschluss
+leert nach dem DB-Reset auch die PUT-Laufzeitvariablen. Fuer Einzelpruefungen
+zuerst Anmeldung, Testdatenreset und die vorbereitenden Requests ausfuehren.
 DELETE und GraphQL folgen mit den jeweiligen Funktionen.
 
 ## Abhängigkeiten und Sicherheitslücken
@@ -897,7 +911,8 @@ mit ersetztem pg-Treiber. Echte PostgreSQL-Integrationstests pruefen konkurriere
 Updates und Rollback. PUT-Route, Rollenfreigabe, CORS und
 HTTP-Fehlerzuordnung sind umgesetzt und lokal mit ersetztem Repository und
 Token-Verifier geprueft; HTTP-Integrationstests verwenden echte Keycloak-Tokens
-und die RC1-Testdatenbank. Die PUT-Faelle fuer Bruno stehen noch aus.
+und die RC1-Testdatenbank. Bruno prueft dieselben Schreib-Endpunkte mit echten
+Tokens, uebernommenen ETags, Fehlerfaellen und abschliessendem Datenreset.
 
 `StudentWriteService.update` validiert ID, Versionsangabe und vollstaendigen
 Body vor dem Datenbankzugriff. Lese- und Schreibservice verwenden dasselbe

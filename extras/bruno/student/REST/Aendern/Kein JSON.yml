@@ -1,0 +1,42 @@
+info:
+  name: Kein JSON
+  type: http
+  seq: 10
+
+http:
+  method: PUT
+  url: "{{putUrl}}"
+  headers:
+    - name: Content-Type
+      value: "application/json"
+    - name: If-Match
+      value: "{{putEtag}}"
+  auth:
+    type: bearer
+    token: "{{adminToken}}"
+  body:
+    type: json
+    data: |-
+      FALSCHES JSON
+
+runtime:
+  scripts:
+    - type: before-request
+      code: |-
+        // Exakte Bytes statt eines automatisch serialisierten JSON-Strings.
+        req.setBody(Buffer.from('FALSCHES JSON'));
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "400"
+    - expression: res.headers['content-type']
+      operator: eq
+      value: "application/problem+json"
+    - expression: res.body.statusCode
+      operator: eq
+      value: "400"
+
+settings:
+  encodeUrl: true
+  timeout: 5000
+  followRedirects: false

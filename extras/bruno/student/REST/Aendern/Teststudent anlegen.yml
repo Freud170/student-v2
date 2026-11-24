@@ -1,0 +1,62 @@
+info:
+  name: Teststudent anlegen
+  type: http
+  seq: 1
+
+http:
+  method: POST
+  url: "{{restUrl}}"
+  headers:
+    - name: Content-Type
+      value: "application/json"
+    - name: Content-Encoding
+      value: "identity"
+  auth:
+    type: bearer
+    token: "{{adminToken}}"
+  body:
+    type: json
+    data: |-
+      {
+          "matrikelnummer": "777779",
+          "nachname": "Neu",
+          "vorname": "Nina",
+          "email": "put.bruno@h-ka.de",
+          "username": "put-bruno",
+          "adresse": {
+              "plz": "53111",
+              "ort": "Bonn"
+          },
+          "pruefungsleistungen": [
+              {
+                  "modul": "Datenbanken",
+                  "note": 2,
+                  "semester": "SS 2026"
+              }
+          ]
+      }
+
+runtime:
+  scripts:
+    - type: before-request
+      code: |-
+        bru.setVar('putUrl', '');
+        bru.setVar('putEtag', '');
+        bru.setVar('putSnapshot', '');
+    - type: after-response
+      code: |-
+        if (res.getStatus() === 201) {
+            bru.setVar('putUrl', res.getHeader('location'));
+        }
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "201"
+    - expression: res.headers.location
+      operator: matches
+      value: "\\/rest\\/[1-9]\\d*$"
+
+settings:
+  encodeUrl: true
+  timeout: 5000
+  followRedirects: false

@@ -1,0 +1,47 @@
+info:
+  name: Als student Leistungen leeren
+  type: http
+  seq: 17
+
+http:
+  method: PUT
+  url: "{{putUrl}}"
+  headers:
+    - name: Content-Type
+      value: "application/json"
+    - name: If-Match
+      value: "{{putEtag}}"
+  auth:
+    type: bearer
+    token: "{{studentToken}}"
+  body:
+    type: json
+    data: |-
+      {
+          "matrikelnummer": "777779",
+          "nachname": "Neu",
+          "vorname": "Tina",
+          "email": "put.bruno@h-ka.de",
+          "username": "put-bruno",
+          "adresse": {
+              "plz": "53113",
+              "ort": "Bonn"
+          },
+          "pruefungsleistungen": []
+      }
+
+runtime:
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "204"
+    - expression: res.headers.etag
+      operator: matches
+      value: '^"2"$'
+    - expression: res.body
+      operator: isEmpty
+
+settings:
+  encodeUrl: true
+  timeout: 5000
+  followRedirects: false
