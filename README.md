@@ -125,10 +125,65 @@ Pretty-Formatierung. HTTPS lauscht auf Port 3000 und erlaubt auch HTTP/1.1.
 Mit `populate = false` ist `/dev/db_populate` nicht registriert; ein
 DB-Superuser-Passwort wird fuer diesen Betrieb nicht benoetigt.
 
-Das Dockerfile und der Laufzeittest im Container folgen im naechsten Paket
-von #27; die Compose-Einbindung folgt mit #28. Diese Konfiguration allein
-startet keine Dienste. Die bestehende lokale Startkonfiguration bleibt aktiv,
-solange die Container-Konfiguration nicht eingebunden wird.
+Das Image enthaelt diese Container-Konfiguration bereits unter
+`/opt/app/src/config/config.toml`. Eine angepasste Datei kann dort read-only
+eingebunden werden. Die lokale Startkonfiguration bleibt unveraendert.
+Die Compose-Einbindung folgt mit #28.
+
+## Docker-Image
+
+Das Multi-Stage-Dockerfile installiert mit pnpm `12.19.0` ausschliesslich
+Produktionsabhaengigkeiten anhand der Lockdatei. Das Laufzeitimage basiert auf
+`dhi.io/node:26.13.0-0-debian13` und startet `node src/index.mts` als Benutzer
+`1000:1000`. Node fuehrt die TypeScript-Dateien direkt aus; ein separater
+Kompilierungsschritt ist nicht erforderlich. Die Typpruefung erfolgt mit
+`pnpm run typecheck` und in CI.
+
+`.dockerignore` begrenzt den Build-Kontext auf die benoetigten Dateien.
+Lokale Zugangsdaten, TLS-Schluessel, Tests, Logs und lokale `node_modules`
+werden nicht uebernommen. Die Dateien aus der Tabelle oben werden erst beim
+Start eingebunden. Der Node-Healthcheck prueft `/health/readiness` mit dem
+eingebundenen HTTPS-Zertifikat als Vertrauensanker; er benoetigt keine Shell.
+
+Pruefung und Build aus dem Projektverzeichnis (Docker muss laufen; fuer
+`dhi.io` muss der Registry-Zugriff eingerichtet sein):
+
+```powershell
+Get-Content Dockerfile | docker run --rm --interactive hadolint/hadolint:v2.15.1-debian
+docker build --tag student-v2:2026.11.0-hardened .
+```
+
+Zum lokalen Start muss der vorhandene PostgreSQL-19rc1-Container mit den
+`*_student_v2`-Volumes im Netzwerk `acme-network` unter `postgres` erreichbar
+sein. Port 3000 muss frei sein. Vorher Container, Volumes und Zertifikate nach
+der PostgreSQL-Anleitung pruefen; keine Datenbank neu initialisieren.
+Das lokale DB-Zertifikat muss dem laufenden Server entsprechen.
+
+```powershell
+$projectDir = (Get-Location).Path
+docker run --detach --name student-v2-app --read-only --cap-drop ALL `
+  --security-opt no-new-privileges --network acme-network `
+  --publish 127.0.0.1:3000:3000 `
+  --mount "type=bind,source=$projectDir/src/config/tls/key.pem,target=/run/secrets/student-key.pem,readonly" `
+  --mount "type=bind,source=$projectDir/src/config/tls/certificate.crt,target=/run/config/student-certificate.crt,readonly" `
+  --mount "type=bind,source=$projectDir/extras/compose/postgres/password.txt,target=/run/secrets/student-db-password,readonly" `
+  --mount "type=bind,source=$projectDir/extras/compose/postgres/init/tls/server.crt,target=/run/config/postgres-ca.crt,readonly" `
+  student-v2:2026.11.0-hardened
+docker inspect student-v2-app --format '{{.State.Health.Status}}'
+docker logs student-v2-app
+docker stop --timeout 15 student-v2-app
+docker rm student-v2-app
+```
+
+Der Start laedt keine Testdaten. `docker stop` sendet SIGTERM an Node;
+die Anwendung schliesst HTTP-Verbindungen und DB-Pool geordnet.
+
+Geprueft: Hadolint, Image-Build, Laufzeit als `1000:1000` mit
+schreibgeschuetztem Dateisystem, Docker-Healthcheck (`healthy`), HTTPS mit
+Zertifikatspruefung und TLS 1.3 ueber HTTP/1.1 und HTTP/2, Liveness, Readiness
+sowie lesende REST-Aufrufe. SIGTERM beendet die Anwendung mit Exitcode 0.
+Die Pruefsummen aller drei Datenbanktabellen blieben unveraendert. Der
+Testcontainer wurde anschliessend entfernt; PostgreSQL blieb in Betrieb.
 
 ## Anwendungsbasis
 
