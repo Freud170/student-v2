@@ -1,0 +1,59 @@
+# Bestehende Keycloak-Datenbank mit ihrer bisherigen PostgreSQL-Version.
+name: postgres
+
+services:
+  keycloak-db:
+    image: postgres:19beta4-trixie
+    pull_policy: never
+    # Nur einen vorhandenen Cluster starten; keine automatische Initialisierung.
+    entrypoint: [postgres]
+    command:
+      - "-D"
+      - /var/lib/postgresql/19/docker
+      - "--ssl=on"
+      - "--ssl-cert-file=/var/lib/postgresql/19/docker/server.crt"
+      - "--ssl-key-file=/var/lib/postgresql/19/docker/server.key"
+    volumes:
+      - keycloak_pg_data:/var/lib/postgresql/19/docker
+      - keycloak_pg_tablespace:/tablespace
+      - keycloak_pg_init:/init:ro
+    environment:
+      TZ: Europe/Berlin
+    networks:
+      keycloak-db-network:
+        # Der vorhandene Zertifikatsname bleibt nur in diesem Netzwerk gueltig.
+        aliases: [postgres]
+    user: "postgres:postgres"
+    hostname: postgres
+    container_name: student-v2-keycloak-db
+    cap_drop: [ALL]
+    healthcheck:
+      test: [CMD, pg_isready, --dbname=keycloak, --username=keycloak]
+      interval: 5s
+      timeout: 2s
+      retries: 2
+      start_period: 5s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 768M
+        reservations:
+          cpus: "0.5"
+          memory: 512M
+
+volumes:
+  keycloak_pg_data:
+    name: pg_data
+    external: true
+  keycloak_pg_tablespace:
+    name: pg_tablespace
+    external: true
+  keycloak_pg_init:
+    name: pg_init
+    external: true
+
+networks:
+  keycloak-db-network:
+    internal: true

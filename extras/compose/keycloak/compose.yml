@@ -1,0 +1,90 @@
+# Vorhandenen Realm, Benutzer und Zertifikate weiterverwenden.
+name: postgres
+
+include:
+  - path: ../keycloak-postgres/compose.yml
+
+services:
+  keycloak:
+    image: dhi.io/keycloak:26.7.4-debian13
+    pull_policy: never
+    command: [start, "--hostname-strict=false"]
+    depends_on:
+      keycloak-db:
+        condition: service_healthy
+    ports:
+      - host_ip: 127.0.0.1
+        published: 8880
+        target: 8080
+      - host_ip: 127.0.0.1
+        published: 8843
+        target: 8443
+      - host_ip: 127.0.0.1
+        published: 9990
+        target: 9000
+    volumes:
+      - kc_data:/opt/keycloak/data
+      - kc_tls:/opt/keycloak/tls:ro
+      - type: bind
+        source: ../postgres/init/tls/server.crt
+        target: /opt/keycloak/conf/postgres-ca.crt
+        read_only: true
+        bind:
+          create_host_path: false
+    env_file:
+      - path: .env
+        format: raw
+    environment:
+      KC_HTTPS_CERTIFICATE_FILE: /opt/keycloak/tls/kc_cert
+      KC_HTTPS_CERTIFICATE_KEY_FILE: /opt/keycloak/tls/kc_key
+      KC_HTTPS_PROTOCOLS: "TLSv1.3"
+      KC_HTTP_ENABLED: true
+      KC_DB: postgres
+      KC_DB_URL_HOST: postgres
+      KC_DB_URL_DATABASE: keycloak
+      KC_DB_SCHEMA: keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_URL_PROPERTIES: "?sslmode=verify-full&sslrootcert=/opt/keycloak/conf/postgres-ca.crt"
+      KC_CACHE: local
+      KC_LOG_CONSOLE_COLOR: true
+      KC_HEALTH_ENABLED: true
+    networks: [keycloak-network, keycloak-db-network]
+    hostname: keycloak
+    container_name: keycloak
+    user: nonroot:nonroot
+    cap_drop: [ALL]
+    healthcheck:
+      test:
+        - CMD
+        - bash
+        - "-ec"
+        - |
+          response=$$(printf 'GET /health/ready HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' |
+            openssl s_client -connect localhost:9000 -servername localhost \
+            -verify_hostname localhost -CAfile /opt/keycloak/tls/kc_cert \
+            -verify_return_error -quiet -ignore_unexpected_eof 2>/dev/null)
+          [[ "$$response" == "HTTP/1.1 200 "* ]]
+      interval: 30s
+      timeout: 5s
+      retries: 2
+      start_period: 30s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 4G
+        reservations:
+          cpus: "2.0"
+          memory: 2G
+
+volumes:
+  kc_data:
+    name: kc_data
+    external: true
+  kc_tls:
+    name: kc_tls
+    external: true
+
+networks:
+  keycloak-network:

@@ -128,7 +128,7 @@ DB-Superuser-Passwort wird fuer diesen Betrieb nicht benoetigt.
 Das Image enthaelt diese Container-Konfiguration bereits unter
 `/opt/app/src/config/config.toml`. Eine angepasste Datei kann dort read-only
 eingebunden werden. Die lokale Startkonfiguration bleibt unveraendert.
-Die Compose-Einbindung fuer Anwendung und PostgreSQL steht unter
+Die Compose-Einbindung fuer Anwendung, PostgreSQL und Keycloak steht unter
 [Docker Compose](#docker-compose).
 
 ## Docker-Image
@@ -189,19 +189,41 @@ Testcontainer wurde anschliessend entfernt; PostgreSQL blieb in Betrieb.
 ## Docker Compose
 
 `extras/compose/student/compose.yml` startet die Anwendung zusammen mit
-PostgreSQL. Der App-Einstieg bindet `../backend/compose.yml` ein; dieser
-verwendet die vorhandene PostgreSQL-Konfiguration. Alle Einstiegspunkte nutzen
-das bestehende Compose-Projekt `postgres` und das Netzwerk `acme-network`.
+PostgreSQL und dem vorhandenen Keycloak. Der App-Einstieg bindet
+`../backend/compose.yml` ein. Alle Einstiegspunkte nutzen
+das bestehende Compose-Projekt `postgres`; RC1 bleibt im `acme-network`.
 So wird eine bereits aus `extras/compose/postgres` gestartete Datenbank
 wiederverwendet. Keine abweichenden Projektnamen mit `-p` oder
 `COMPOSE_PROJECT_NAME` verwenden.
 
-Voraussetzungen sind das lokal gebaute Image `student-v2:2026.11.0-hardened`,
-die eingerichteten `*_student_v2`-Volumes und die oben genannten TLS- und
-Passwortdateien. Vor dem Start Container und Volume-Zuordnung nach der
+Der Stack verwendet zwei getrennte PostgreSQL-Instanzen:
+
+| Dienst | Image | Daten und Verbindung |
+|---|---|---|
+| `student` | `student-v2:2026.11.0-hardened` | App an RC1; HTTPS auf localhost:3000 |
+| `postgres` | `postgres:19rc1-trixie` | `*_student_v2`-Volumes; bisheriger Port 5432 |
+| `keycloak` | `dhi.io/keycloak:26.7.4-debian13` | Bestehender Realm; HTTPS auf localhost:8843 |
+| `keycloak-db` | `postgres:19beta4-trixie` | Alte `pg_data`, `pg_tablespace`, `pg_init`; kein Host-Port |
+
+Keycloak speichert Realm, Clients und Benutzer in der bisherigen Beta4-Datenbank.
+Der Container `student-v2-keycloak-db` startet diesen vorhandenen Cluster ohne
+Initialisierung oder Migration. Die Instanzen haben eigene Datenbanknetze:
+Die App erreicht RC1 als `postgres` im `acme-network`, Keycloak erreicht Beta4
+als `postgres` im internen `keycloak-db-network`. So passt jeweils der bestehende
+TLS-Hostname. App und Keycloak teilen zusaetzlich das `keycloak-network`.
+Keycloak ist nicht am `acme-network`, die App nicht am `keycloak-db-network`.
+
+Voraussetzungen sind die oben genannten lokalen Images, beide eingerichteten
+PostgreSQL-Datenbestaende, `kc_data`/`kc_tls`, die oben genannten TLS-Dateien und
+die lokale Keycloak-`.env`. Vorbereitung und Wiederverwendung stehen in der
+[Keycloak-Betriebsanleitung](extras/compose/keycloak/ReadMe.md).
+Vor dem Start Container und Volume-Zuordnung nach der
 [PostgreSQL-Anleitung](extras/compose/postgres/ReadMe.md) pruefen. Insbesondere
 darf `postgres` auf Port 5432 nicht zur ersten Abgabe gehoeren; Port 3000 muss
-frei sein. Das eingebundene DB-Zertifikat muss zum aktiven Server passen.
+frei sein. Fuer Keycloak muessen 8880, 8843 und 9990 frei sein. Die erste Abgabe
+darf die alten PostgreSQL- oder Keycloak-Volumes nicht gleichzeitig verwenden.
+Das eingebundene DB-Zertifikat muss zu beiden PostgreSQL-Servern passen;
+im vorhandenen Bestand sind ihre Zertifikate identisch.
 
 Aus dem Projektverzeichnis:
 
@@ -212,8 +234,10 @@ docker compose -f extras/compose/student/compose.yml ps
 docker compose -f extras/compose/student/compose.yml logs student
 ```
 
-Die Anwendung wartet auf den PostgreSQL-Healthcheck. `--wait` wartet auch auf
-den Readiness-Healthcheck des App-Images. HTTPS ist unter
+Keycloak wartet auf seine Datenbank, die Anwendung auf RC1 und Keycloak.
+`--wait` wartet auch auf den Readiness-Healthcheck des App-Images. Der
+Keycloak-Healthcheck prueft den HTTPS-Endpunkt mit Zertifikats- und
+Hostnamenpruefung und verlangt HTTP 200. HTTPS der Anwendung ist unter
 `https://localhost:3000` erreichbar; der App-Port wird nur an `127.0.0.1`
 veroeffentlicht. Das lokale Image wird nicht automatisch gebaut oder aus einer
 Registry geladen. Nach Codeaenderungen zuerst das Image erneut bauen.
@@ -239,25 +263,26 @@ Den gesamten Stack stoppen und Container sowie Netzwerk entfernen:
 docker compose -f extras/compose/student/compose.yml down
 ```
 
-Die externen PostgreSQL-Volumes bleiben erhalten. Solange die App laeuft, den
-gemeinsamen App-Einstieg fuer den Stack verwenden; `down` im PostgreSQL- oder
-Backend-Verzeichnis wuerde die von der App benoetigte Datenbank stoppen.
+Alle externen Daten- und TLS-Volumes bleiben erhalten. Solange die App laeuft,
+den gemeinsamen App-Einstieg fuer den Stack verwenden; `down` in einem
+Backend-Unterverzeichnis wuerde benoetigte Dienste stoppen. Vor dem Wechsel
+zur ersten Abgabe den gesamten Stack stoppen und seine Container entfernen.
+Die Anwendung prueft noch keine Keycloak-Tokens; Authentifizierung und
+Rollenpruefung folgen mit #30/#31.
 
-Keycloak ist noch nicht eingebunden; #28 ist damit teilweise umgesetzt. Fuer
-den gemeinsamen Betrieb muss die vorhandene Keycloak-Datenbank aus der ersten
-Abgabe erreichbar bleiben. Die neue PostgreSQL-Instanz besitzt getrennte
-Datenvolumes. Die vorhandene Keycloak-Compose-Datei bindet dagegen die alte
-PostgreSQL-Instanz ein; beide verwenden denselben Containernamen und Port.
-Die Betriebsaufteilung wird vor der Keycloak-Einbindung festgelegt.
-Authentifizierung und Rollenpruefung folgen mit #30/#31.
-
-Der Compose-Start wurde mit der vorhandenen PostgreSQL-Instanz geprueft:
-beide Dienste gesund, TLS 1.3 mit Zertifikatspruefung ueber HTTP/1.1 und HTTP/2,
-Liveness, Readiness, vollstaendige REST-Aggregate sowie ETag/304 und 404.
-Die App beendet sich auf SIGTERM mit Exitcode 0. PostgreSQL wurde dabei weder
-neu erstellt noch neu gestartet; Tabellen-Pruefsummen und Sequenzstaende
-blieben unveraendert. Die regulaeren Integrationstests laden Testdaten neu
-und gehoeren nicht zu dieser lesenden Compose-Pruefung.
+Geprueft sind vier gesunde Dienste, App-HTTPS mit TLS 1.3 ueber HTTP/1.1 und
+HTTP/2, Liveness, Readiness, vollstaendige REST-Aggregate sowie ETag/304 und 404.
+Keycloak-Readiness, OIDC-Discovery, JWKS und der Zugriff aus dem App-Container
+funktionieren mit geprueften Zertifikaten; eine fremde CA wird abgelehnt.
+Die echten Keycloak-DB-Verbindungen verwenden TLS 1.3 mit `verify-full`.
+RC1 lief dabei ohne Neustart weiter. Beide Studierendenbestaende und 98
+Keycloak-Tabellen (u.a. Realms, Clients, Benutzer und Credentials) blieben
+unveraendert. Keycloak bereinigte im normalen Betrieb elf gespeicherte
+Sitzungen aus `offline_user_session` und `offline_client_session`.
+Der geordnete SIGTERM-Shutdown ist geprueft: App und Beta4-PostgreSQL endeten
+mit Exitcode 0, Keycloak mit 143 und protokolliertem vollstaendigem Shutdown.
+Die regulaeren Integrationstests laden Testdaten neu und gehoeren nicht zu
+dieser lesenden Compose-Pruefung.
 
 ## Anwendungsbasis
 
@@ -662,8 +687,9 @@ Eine Bruno-Collection prueft diese Endpunkte (#24). Unit-Tests und Integrationst
 mit `fetch` gegen App und PostgreSQL laufen mit Vitest; die DB wird vorher ueber den
 Dev-Endpunkt neu geladen (#25). GitHub Actions prueft jeden Push mit Oxfmt, Oxlint,
 `tsc` und den Unit-Tests (#26). Das Hardened-App-Image ist umgesetzt (#27);
-Docker Compose startet Anwendung und PostgreSQL gemeinsam. Die Einbindung des
-bestehenden Keycloak ist fuer #28 noch offen.
+Docker Compose startet Anwendung, PostgreSQL und den vorhandenen Keycloak
+gemeinsam (#28). Keycloak verwendet weiterhin seine bisherige Beta4-Datenbank;
+die Studierendenanwendung verwendet die getrennte RC1-Instanz.
 
 ## Team
 
