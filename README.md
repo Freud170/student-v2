@@ -357,6 +357,7 @@ beendet und die Testcontainer entfernt. Die RC1-Datenbank wurde nicht gestartet.
 | Endpunkt | Erforderliche Berechtigung |
 |---|---|
 | `POST /rest` | Client-Rolle `admin` oder `student` |
+| `PUT /rest/:id` | Client-Rolle `admin` oder `student` |
 | `QUERY /dev/db_populate` | Client-Rolle `admin`; nur mit `populate = true` |
 | GET/HEAD fuer `/`, `/rest`, `/rest/:id` und Health | Oeffentlich |
 | CORS-Preflight mit OPTIONS | Kein Token erforderlich |
@@ -535,6 +536,7 @@ werden explizit an die Router und Services uebergeben.
 | `GET /rest/:id` mit `If-None-Match` | Version unveraendert: 304 ohne Body |
 | `GET /rest?nachname=…` | 200 mit Liste der Treffer; ohne Parameter alle; keine Treffer oder ungueltige Parameter: 404 |
 | `POST /rest` | `admin` oder `student`; 201 mit `Location`-Header (ohne Body); ungueltige Daten oder vergebene Matrikelnummer/Email/Username: 422; kein JSON: 400 |
+| `PUT /rest/:id` | `admin` oder `student`; 204 mit neuem `ETag` (ohne Body); fehlendes `If-Match`: 428; ungueltige oder nicht aktuelle Version: 412; unbekannte/ungueltige ID: 404; ungueltige Daten oder Duplikate: 422; kein JSON: 400 |
 | `GET /health/liveness` | Status 200 mit `{"status":"up"}` |
 | `GET /health/readiness` | `SELECT 1` erfolgreich: 200 mit `{"status":"up"}`; DB-Fehler: 503 mit `{"status":"down"}` |
 | `HEAD /`, `HEAD /rest` | Dieselben Statuscodes und Header, ohne Response-Body |
@@ -550,7 +552,9 @@ z.B. `"0"`. `If-None-Match` wird exakt verglichen.
 Bekannte Einschränkung: Bei gzip-komprimierten Antworten macht `hono/compress` daraus
 ein schwaches `W/"0"`; sendet ein Client das zurück (z.B. ein Browser), gibt es 200
 statt 304. Für Tests mit Bruno und Vitest (`If-None-Match: "0"`) spielt das keine
-Rolle. Paging, PUT, DELETE und GraphQL folgen mit den jeweiligen Funktionen. `Student` bleibt das
+Rolle. Fuer PUT einen starken ETag aus einem GET mit `Accept-Encoding: identity`
+verwenden; ein schwacher ETag wird als `If-Match` mit 412 abgelehnt.
+Paging, DELETE und GraphQL folgen mit den jeweiligen Funktionen. `Student` bleibt das
 zentrale Aggregate mit Adresse (1:1) und Pruefungsleistungen (1:N).
 
 **Neuanlegen mit POST:** Der Request-Body wird mit Zod geprueft
@@ -577,13 +581,25 @@ Studierenden, Adresse und Leistungen ueber das Repository in einer Transaktion a
 `erzeugt` und `aktualisiert` setzt der Service. POST verlangt ein gueltiges
 Keycloak-Access-Token mit der Client-Rolle `admin` oder `student`.
 
+**Aendern mit PUT:** `PUT /rest/:id` erhaelt denselben vollstaendigen JSON-Body
+wie POST, ein Bearer-Token fuer `admin` oder `student` und `If-Match` mit dem
+zuletzt gelesenen starken ETag, z.B. `"0"`. Bei Erfolg kommt 204 ohne Body mit
+dem neuen ETag, z.B. `"1"`. Unbekannte IDs werden nicht neu angelegt.
+Authentifizierung und Rollenpruefung laufen zuerst, danach werden Pfad-ID,
+Vorhandensein von `If-Match` und JSON geprueft. Die fachliche Validierung und
+Versionspruefung uebernimmt der Service. CORS erlaubt PUT und `If-Match`;
+der ETag ist fuer Browser freigegeben. OPTIONS benoetigt kein Token.
+
 **Globale Fehlerbehandlung** (`src/error-handler.mts`):
 Der Service wirft eigene Fehlerklassen (`src/student/service/errors.mts`), Router
 fangen keine Fehler ab. `app.onError` bildet sie zentral ab: `NotFoundError` (unbekannte
 oder ungueltige ID, ungueltige Suchparameter, keine Treffer) → 404, `ZodError` und
-`UniqueError` → 422 als Problem Details nach RFC 9457 (`application/problem+json`),
-alle anderen Fehler → 500 ohne interne Details (diese nur im Log). Kein gueltiges
-JSON im POST-Body beantwortet der Router selbst mit 400. 412 und 428 folgen mit PUT.
+`UniqueError` → 422, `VersionInvalidError`/`VersionOutdatedError` → 412 und
+`VersionRequiredError` → 428, jeweils als Problem Details nach RFC 9457
+(`application/problem+json`). 428-Antworten setzen `Cache-Control: no-store`.
+Die Security-Fehler liefern wie oben beschrieben 401/403/503; alle anderen
+Fehler → 500 ohne interne Details (diese nur im Log). Ungueltiges JSON bei
+POST oder PUT beantwortet der Router selbst mit 400.
 
 Die Health-Endpunkte liegen in einem eigenen Router unter `src/admin/` und
 durchlaufen dieselbe globale Middleware wie die anderen Routen. Liveness zeigt,
@@ -751,7 +767,8 @@ Pop-Location
 
 Keine ausfuehrlichen Reports mit Token-Antworten oder Login-Formularen speichern.
 Der Test „kein JSON“ sendet absichtlich rohe Bytes, damit der HTTP-Client daraus
-keinen gueltigen JSON-String erzeugt. PUT, DELETE und GraphQL folgen mit den Funktionen.
+keinen gueltigen JSON-String erzeugt. Die PUT-Faelle fuer Bruno stehen noch aus;
+DELETE und GraphQL folgen mit den jeweiligen Funktionen.
 
 ## Abhängigkeiten und Sicherheitslücken
 
@@ -840,7 +857,7 @@ Integrationstests und Bruno verwendet; TLS-Vertrauen ist explizit konfiguriert.
 Die vorhandene Keycloak-Einrichtung ist damit fuer die Anwendung angebunden
 (#29); Token-Pruefung und Rollenfreigaben sind durchgaengig geprueft (#30/#31).
 
-Fuer PUT mit Versionsschutz (#32) ist die Repository-Methode `update` vorbereitet.
+PUT mit Versionsschutz (#32) verwendet die Repository-Methode `update`.
 Sie prueft ID und erwartete Version direkt im SQL-UPDATE, erhoeht die Version
 und setzt `aktualisiert` in derselben Transaktion wie Adresse und Leistungen.
 `erzeugt` bleibt erhalten. Die Adresse wird ueber den eindeutigen
@@ -852,8 +869,9 @@ Ohne passendes ID-/Versionspaar liefert die Methode `undefined` und laesst
 die Kinddaten unveraendert. DB-Fehler brechen die gesamte Transaktion ab.
 Lokale Tests pruefen das von Drizzle erzeugte SQL und die Transaktionssteuerung
 mit ersetztem pg-Treiber. Echte PostgreSQL-Pruefungen fuer konkurrierende
-Updates und Rollback stehen noch aus. PUT-Route und HTTP-Fehlerzuordnung sind
-noch nicht angebunden; PUT ist noch nicht verfuegbar.
+Updates und Rollback stehen noch aus. PUT-Route, Rollenfreigabe, CORS und
+HTTP-Fehlerzuordnung sind umgesetzt und lokal mit ersetztem Repository und
+Token-Verifier geprueft. Echte PUT-Integrationstests und Bruno-Faelle folgen noch.
 
 `StudentWriteService.update` validiert ID, Versionsangabe und vollstaendigen
 Body vor dem Datenbankzugriff. Lese- und Schreibservice verwenden dasselbe

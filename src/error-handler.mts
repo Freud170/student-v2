@@ -1,10 +1,18 @@
 // Globale Fehlerbehandlung: Fehler aus Router und Service zentral auf Statuscodes abbilden.
 
 import { ForbiddenError, KeycloakUnavailableError, UnauthorizedError } from './security/errors.mts';
-import { NotFoundError, UniqueError } from './student/service/errors.mts';
+import {
+    NotFoundError,
+    UniqueError,
+    VersionInvalidError,
+    VersionOutdatedError,
+    VersionRequiredError,
+} from './student/service/errors.mts';
 import {
     createProblemDetails,
     forbidden,
+    preconditionFailed,
+    preconditionRequired,
     serviceUnavailable,
     unauthorized,
     unprocessableContent,
@@ -41,7 +49,13 @@ export const createErrorHandler =
             // Matrikelnummer, Email oder Username bereits vergeben
             return createProblemDetails(c, unprocessableContent, err.message);
         }
-        // 412 und 428 folgen mit PUT und If-Match (#32)
+        if (err instanceof VersionRequiredError) {
+            c.header('Cache-Control', 'no-store');
+            return createProblemDetails(c, preconditionRequired, err.message);
+        }
+        if (err instanceof VersionInvalidError || err instanceof VersionOutdatedError) {
+            return createProblemDetails(c, preconditionFailed, err.message);
+        }
 
         // Interne Details nur ins Log, nicht in die Antwort
         logger.error({ err }, 'Interner Serverfehler');

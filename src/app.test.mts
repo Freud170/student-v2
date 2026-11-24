@@ -199,7 +199,7 @@ describe('CORS', () => {
         });
 
         expect(response.status).toBe(204);
-        expect(response.headers.get('Access-Control-Allow-Methods')).toBe('GET,HEAD,POST');
+        expect(response.headers.get('Access-Control-Allow-Methods')).toBe('GET,HEAD,POST,PUT');
         expect(response.headers.get('Access-Control-Allow-Headers')).toContain('Authorization');
         expect(response.headers.get('Access-Control-Allow-Headers')).not.toContain('X-Untrusted');
         await expect(response.text()).resolves.toBe('');

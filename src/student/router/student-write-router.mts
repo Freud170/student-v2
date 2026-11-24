@@ -3,8 +3,10 @@ import { Hono } from 'hono';
 import { type RolesRequired } from '../../security/roles-required.mts';
 import { StudentNeuSchema } from '../validation/student-validation.mts';
 import { type StudentWriteService } from '../service/student-write-service.mts';
+import { VersionRequiredError } from '../service/errors.mts';
 
 const CREATED = 201;
+const NO_CONTENT = 204;
 
 // Absolute URL des neuen Datensatzes, z.B. https://localhost:3000/rest/1000
 const createLocation = (requestUrl: string, id: number): string => {
@@ -14,7 +16,7 @@ const createLocation = (requestUrl: string, id: number): string => {
 
 // Authentifizierung und Rollenpruefung laufen vor Body-Validierung und Service-Aufruf.
 export const createStudentWriteRouter = (
-    service: Pick<StudentWriteService, 'create'>,
+    service: Pick<StudentWriteService, 'create' | 'update'>,
     rolesRequired: RolesRequired,
 ): Hono => {
     const router = new Hono();
@@ -35,6 +37,28 @@ export const createStudentWriteRouter = (
 
         c.header('Location', createLocation(c.req.url, id));
         return c.body(null, CREATED);
+    });
+
+    router.put('/:id', rolesRequired('admin', 'student'), async (c) => {
+        const id = c.req.param('id');
+        // Wie bei GET keine teilweise geparsten IDs wie "1abc" oder "1e3".
+        if (!/^\d+$/u.test(id)) {
+            return c.notFound();
+        }
+        const version = c.req.header('If-Match');
+        if (version === undefined) {
+            throw new VersionRequiredError();
+        }
+        let requestBody: unknown;
+        try {
+            requestBody = await c.req.json();
+        } catch {
+            return createProblemDetails(c, badRequest, 'Ungueltiges JSON');
+        }
+        // Der Service validiert ID, Version und den vollstaendigen Body.
+        const neueVersion = await service.update(Number(id), requestBody, version);
+        c.header('ETag', `"${neueVersion}"`);
+        return c.body(null, NO_CONTENT);
     });
 
     return router;

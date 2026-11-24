@@ -42,9 +42,10 @@ const setup = () => {
     });
     const studentId = 1000;
     const create = vi.spyOn(container.studentWriteService, 'create').mockResolvedValue(studentId);
+    const update = vi.spyOn(container.studentWriteService, 'update').mockResolvedValue(1);
     const populate = vi.spyOn(container, 'dbPopulate').mockResolvedValue(undefined);
     vi.spyOn(container.studentService, 'find').mockResolvedValue([]);
-    return { app: createApp(container), verify, create, populate, lines };
+    return { app: createApp(container), verify, create, update, populate, lines };
 };
 
 describe('Berechtigungsmatrix der zusammengesetzten App', () => {
@@ -73,28 +74,54 @@ describe('Berechtigungsmatrix der zusammengesetzten App', () => {
         expect(populate).not.toHaveBeenCalled();
     });
 
-    test('Preflight braucht kein Token und gibt Authorization sowie POST frei', async () => {
-        const { app, verify, create } = setup();
-        const response = await app.request('/rest', {
+    test.each(['POST', 'PUT'])('Preflight gibt %s ohne Token frei', async (method) => {
+        const { app, verify, create, update } = setup();
+        const response = await app.request('/rest/1', {
             method: 'OPTIONS',
             headers: {
                 Origin: origin,
-                'Access-Control-Request-Method': 'POST',
-                'Access-Control-Request-Headers': 'Authorization,Content-Type',
+                'Access-Control-Request-Method': method,
+                'Access-Control-Request-Headers': 'Authorization,Content-Type,If-Match',
             },
         });
         expect(response.status).toBe(204);
         expect(response.headers.get('Access-Control-Allow-Headers')).toContain('Authorization');
-        expect(response.headers.get('Access-Control-Allow-Methods')).toContain('POST');
+        expect(response.headers.get('Access-Control-Allow-Headers')).toContain('If-Match');
+        expect(response.headers.get('Access-Control-Allow-Methods')).toContain(method);
         expect(verify).not.toHaveBeenCalled();
         expect(create).not.toHaveBeenCalled();
+        expect(update).not.toHaveBeenCalled();
     });
 });
 
 const unavailable = 503;
+describe('PUT in der zusammengesetzten App', () => {
+    test('PUT erreicht den Schreibservice und legt den ETag fuer CORS offen', async () => {
+        const { app, verify, update, create } = setup();
+        const response = await app.request('/rest/1', {
+            method: 'PUT',
+            headers: { ...headers, 'Content-Type': 'application/json', 'If-Match': '"0"' },
+            body: JSON.stringify(studentNeu),
+        });
+        expect(response.status).toBe(204);
+        expect(response.headers.get('ETag')).toBe('"1"');
+        expect(response.headers.get('Access-Control-Expose-Headers')).toContain('ETag');
+        expect(verify).toHaveBeenCalledExactlyOnceWith('private-test-token');
+        expect(update).toHaveBeenCalledExactlyOnceWith(1, studentNeu, '"0"');
+        expect(create).not.toHaveBeenCalled();
+    });
+});
+
 describe('Abgelehnte Anfragen in der gemeinsamen Middleware-Kette', () => {
     test.each([
         { path: '/rest', method: 'POST', status: 401, error: new UnauthorizedError() },
+        { path: '/rest/1', method: 'PUT', status: 401, error: new UnauthorizedError() },
+        {
+            path: '/rest/1',
+            method: 'PUT',
+            status: unavailable,
+            error: new KeycloakUnavailableError(),
+        },
         {
             path: '/rest',
             method: 'POST',
@@ -105,7 +132,7 @@ describe('Abgelehnte Anfragen in der gemeinsamen Middleware-Kette', () => {
     ])(
         '$method $path: $status ohne Nebenwirkung oder sensible Logs',
         async ({ path, method, status, error }) => {
-            const { app, verify, create, populate, lines } = setup();
+            const { app, verify, create, update, populate, lines } = setup();
             if (error) {
                 verify.mockRejectedValue(error);
             }
@@ -120,6 +147,7 @@ describe('Abgelehnte Anfragen in der gemeinsamen Middleware-Kette', () => {
                 expect.objectContaining({ method, path, status, msg: 'HTTP request' }),
             );
             expect(create).not.toHaveBeenCalled();
+            expect(update).not.toHaveBeenCalled();
             expect(populate).not.toHaveBeenCalled();
         },
     );

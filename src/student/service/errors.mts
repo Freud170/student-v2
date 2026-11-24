@@ -6,6 +6,13 @@ import { type UniqueSpalte } from '../repository/student-repository.mts';
 /** Kein Studierender gefunden bzw. ungueltige ID oder Suchparameter (404). */
 export class NotFoundError extends Error {}
 
+/** Die fuer eine Aenderung erforderliche Versionsbedingung fehlt. */
+export class VersionRequiredError extends Error {
+    constructor() {
+        super('Header "If-Match" fehlt.');
+    }
+}
+
 /** Die Versionsangabe entspricht keinem einzelnen numerischen starken ETag. */
 export class VersionInvalidError extends Error {
     constructor() {
