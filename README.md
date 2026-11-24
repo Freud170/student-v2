@@ -267,8 +267,8 @@ Alle externen Daten- und TLS-Volumes bleiben erhalten. Solange die App laeuft,
 den gemeinsamen App-Einstieg fuer den Stack verwenden; `down` in einem
 Backend-Unterverzeichnis wuerde benoetigte Dienste stoppen. Vor dem Wechsel
 zur ersten Abgabe den gesamten Stack stoppen und seine Container entfernen.
-Die Anwendung prueft noch keine Keycloak-Tokens; Authentifizierung und
-Rollenpruefung folgen mit #30/#31.
+Der Token-Verifier ist vorhanden; die Endpunkte verwenden ihn noch nicht.
+Authentifizierungs-Middleware und Rollenpruefung folgen mit #30/#31.
 
 Geprueft sind vier gesunde Dienste, App-HTTPS mit TLS 1.3 ueber HTTP/1.1 und
 HTTP/2, Liveness, Readiness, vollstaendige REST-Aggregate sowie ETag/304 und 404.
@@ -286,9 +286,9 @@ dieser lesenden Compose-Pruefung.
 
 ## Keycloak-Konfiguration
 
-Der TOML-Abschnitt `[keycloak]` wird beim Laden mit Zod validiert.
-Er bereitet die Token-Pruefung vor; Authentifizierung und Rollenschutz sind
-noch nicht aktiv (#30/#31).
+Der TOML-Abschnitt `[keycloak]` wird beim Laden mit Zod validiert und vom
+Token-Verifier verwendet. Authentifizierung und Rollenschutz an den Endpunkten
+sind noch nicht aktiv (#30/#31).
 
 | Einstellung | Lokaler App-Start | App im Compose-Stack |
 |---|---|---|
@@ -304,21 +304,53 @@ Abruf der oeffentlichen Signaturschluessel verwendet die interne Adresse.
 Bei einem anderen Realm oder Zugang beide URLs explizit konfigurieren.
 HTTPS-URLs mit Zugangsdaten, Query oder Fragment sowie leere Client-IDs,
 Audience-Listen/-Eintraege und Zertifikatspfade werden abgelehnt.
-Die Audience `account` ist vorbelegt; der Abgleich mit echten Access-Tokens
-steht bei der Implementierung der Token-Pruefung noch aus.
+Die Audience `account` ist mit echten Access-Tokens bestaetigt: Studierende
+haben `aud = "account"`, der Administrator `aud = ["realm-management", "account"]`.
+Beide Token-Typen enthalten `azp = "student-client"` und `typ = "Bearer"`.
 
 Das vorhandene App-Zertifikat stimmt per SHA-256 mit `kc_cert` im Volume
 `kc_tls` ueberein und deckt `localhost` sowie `keycloak` ab. Der bestehende
 read-only Mount reicht deshalb als Vertrauensanker. Bei einer spaeteren
 Trennung der Zertifikate muss `caFile` auf das Keycloak-Zertifikat zeigen.
 Die Konfigurationsvalidierung liest die Zertifikatsdatei noch nicht und
-stellt keine Netzwerkverbindung her; TLS-Vertrauen wird mit dem
-Schluesselabruf in der Token-Pruefung wirksam.
+stellt keine Netzwerkverbindung her. Der Verifier liest das Zertifikat erst
+beim ersten Schluesselabruf und verwendet es ausschliesslich fuer diese Verbindung.
 
 Realm, Client, Client-Rollen `admin`/`student` und Benutzer werden aus dem
 vorhandenen Keycloak weiterverwendet. Fuer die Pruefung von Signaturen ist
 kein Client-Secret vorgesehen. Ein Token-Bezug fuer Tests wird gesondert
 angebunden; Zugangsdaten gehoeren nicht in TOML oder Logs.
+
+### Token-Verifier
+
+`createContainer` erzeugt eine gemeinsame `tokenVerifier`-Instanz.
+`verify(token)` prueft mit `jose` 6.2.15 die RS256-Signatur, den JWT-Header-Typ,
+Issuer, Audience und die Pflicht-Claims `exp`, `iat` und `sub`. Abgelaufene,
+noch nicht gueltige oder in der Zukunft ausgestellte Tokens werden abgelehnt.
+Zusaetzlich werden `typ = "Bearer"`, `azp = "student-client"` und ein
+nichtleeres Subject verlangt. ID- und Refresh-Tokens sind keine Access-Tokens.
+Die Methode liefert nur erfolgreich verifizierte Claims zurueck; die
+Rollenentscheidung bleibt der nachfolgenden Middleware vorbehalten.
+
+JWKS werden ausschliesslich von der konfigurierten HTTPS-Adresse geladen,
+mit CA- und Hostnamenpruefung sowie TLS 1.3. Redirects werden abgelehnt,
+Antworten auf 1 MiB begrenzt. Der jose-Cache gilt pro Verifier: maximal zehn
+Minuten, fuenf Sekunden Abruf-Timeout und 30 Sekunden Mindestabstand fuer
+erneutes Laden bei unbekannter Schluessel-ID. Parallele Abrufe werden gebuendelt.
+Es werden keine Keep-Alive-Verbindungen offengehalten.
+
+Ungueltige Tokens ergeben `UnauthorizedError`; nicht abrufbare oder unbrauchbare
+Schluessel ergeben `KeycloakUnavailableError`. Die Fehler enthalten weder Tokens
+noch Claims oder urspruengliche JOSE-Payloads. Die HTTP-Zuordnung und Verwendung
+in REST-Routen folgen mit der Middleware; derzeit bleiben die Endpunkte offen.
+
+Geprueft sind lokale RSA- und HTTPS-Tests sowie echte Access-Tokens fuer die
+vorhandenen Rollen `admin` und `student`. Die Live-Pruefung bestaetigt Discovery,
+TLS 1.3 und die Ablehnung falscher Issuer/Audiences, fremder CA, manipulierter
+Signaturen und ID-Tokens. Beide Testanmeldungen wurden ausgeloggt; alle 100
+Keycloak-Tabellen und die drei Studierendentabellen der Beta4-Datenbank hatten
+anschliessend identische Pruefsummen. Die dafuer gestarteten Dienste wurden
+beendet und die Testcontainer entfernt. Die RC1-Datenbank wurde nicht gestartet.
 
 ## Anwendungsbasis
 
@@ -726,6 +758,9 @@ Dev-Endpunkt neu geladen (#25). GitHub Actions prueft jeden Push mit Oxfmt, Oxli
 Docker Compose startet Anwendung, PostgreSQL und den vorhandenen Keycloak
 gemeinsam (#28). Keycloak verwendet weiterhin seine bisherige Beta4-Datenbank;
 die Studierendenanwendung verwendet die getrennte RC1-Instanz.
+Keycloak-Konfiguration und Token-Verifier mit `jose` sind umgesetzt und mit
+echten Tokens geprueft. Endpunktschutz, Rollen-Middleware und die Umstellung
+von Bruno/Integrationstests bleiben fuer #30/#31 offen.
 
 ## Team
 
