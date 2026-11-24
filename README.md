@@ -628,7 +628,9 @@ nach der Rollenpruefung und vor Body-Lesen, JSON-Parsing und Schreibservice;
 bei PUT auch vor der If-Match-Pruefung. Es findet keine Dekompression statt.
 CORS erlaubt `Content-Encoding`, damit auch Browser die Antwort erhalten.
 Lokale Tests pruefen echte gzip-Bytes, ungelesene Bodies und ausbleibende
-Service-Aufrufe; echte HTTP-/Bruno-Pruefungen folgen im Integrationspaket.
+Service-Aufrufe. Integrationstests senden echte gzip-Bytes an POST und PUT und
+pruefen 415 ohne Datenveraenderung sowie erfolgreiche Requests mit `identity`.
+Die entsprechenden Bruno-Pruefungen stehen noch aus.
 
 `X-Response-Time` misst die Bearbeitungszeit bis zur fertigen Response, ohne die
 anschliessende Netzwerkuebertragung. Fehler und Preflights werden ebenfalls
@@ -710,14 +712,30 @@ Die Pino-Tests
 starten eigene Node-Prozesse, pruefen deren Ausgabe und entfernen ihre temporaeren
 Logverzeichnisse unter `temp`. Pool- und Server-Lebenszyklustests simulieren
 externe Ressourcen; sie oeffnen weder einen DB-Zugang noch einen HTTP-Port.
-Die Repository-Tests ersetzen nur den PostgreSQL-Treiber; SQL-Erzeugung und
+Die Repository-Unit-Tests ersetzen nur den PostgreSQL-Treiber; SQL-Erzeugung und
 Ergebnisabbildung laufen mit Drizzle. Sie pruefen Aggregate, Parametrisierung,
 LEFT JOINs ohne LIMIT, alle Suchfilter und die Weitergabe von DB-Fehlern.
 Service-Tests pruefen Validierung vor dem DB-Zugriff; Health-Tests pruefen
 DB-Ausfall und Erholung sowie die unabhaengige Liveness.
-Integrationstests decken Health, Suche mit ID (inkl. ETag), Suche mit Suchparametern
-und POST ab, einschliesslich POST mit beiden Client-Rollen, 401 bei fehlendem
-oder ungueltigem Token und 403 fuer DB-Neuladen mit `student`. Lasttests folgen.
+Integrationstests decken Health, Suche mit ID (inkl. ETag), Suche mit Suchparametern,
+POST und PUT ab. Schreibzugriffe werden mit beiden Client-Rollen geprueft,
+einschliesslich 401 bei fehlendem oder ungueltigem Token und 403 fuer DB-Neuladen
+mit `student`. PUT-Tests pruefen das Ersetzen von Adresse und Leistungen (auch
+eine leere Liste), starke ETags, 400/404/412/422/428 sowie unveraenderte Daten nach
+abgelehnten Requests. Zwei parallele PUTs mit derselben Version duerfen genau
+einmal schreiben. Encoding-Tests senden echte gzip-Bytes und erwarten 415;
+`identity` bleibt erlaubt.
+
+`test/integration/repository/update.test.mts` verwendet zusaetzlich einen eigenen
+TLS-DB-Pool gegen dieselbe RC1-Testdatenbank. Zwei parallele Repository-Updates
+pruefen den atomaren Versionsvergleich ohne Service-Vorpruefung. Eine absichtlich
+ungueltige Note verletzt den DB-Constraint nach dem Root-/Adress-Update und dem
+Loeschen der alten Leistungen: Danach muss das gesamte Aggregate einschliesslich
+IDs, Version und Zeitstempeln unveraendert sein. Ein anschliessendes gueltiges
+Update prueft die weitere Verwendbarkeit des Pools und die Persistenzregeln.
+Die neuen Tests legen eigene Aggregate mit Matrikelnummern in den Bereichen
+66xxxx, 67xxxx und 68xxxx an; die gemeinsam gelesenen CSV-Fixtures bleiben bis
+zum globalen Teardown unangetastet. Lasttests folgen.
 
 Die Regeln für Oxlint stehen in `oxlint.config.mts`; alle Kategorien sind als
 Fehler eingestellt, inklusive Typprüfung.
@@ -875,10 +893,11 @@ bisherigen Leistungen dieses Studenten.
 Ohne passendes ID-/Versionspaar liefert die Methode `undefined` und laesst
 die Kinddaten unveraendert. DB-Fehler brechen die gesamte Transaktion ab.
 Lokale Tests pruefen das von Drizzle erzeugte SQL und die Transaktionssteuerung
-mit ersetztem pg-Treiber. Echte PostgreSQL-Pruefungen fuer konkurrierende
-Updates und Rollback stehen noch aus. PUT-Route, Rollenfreigabe, CORS und
+mit ersetztem pg-Treiber. Echte PostgreSQL-Integrationstests pruefen konkurrierende
+Updates und Rollback. PUT-Route, Rollenfreigabe, CORS und
 HTTP-Fehlerzuordnung sind umgesetzt und lokal mit ersetztem Repository und
-Token-Verifier geprueft. Echte PUT-Integrationstests und Bruno-Faelle folgen noch.
+Token-Verifier geprueft; HTTP-Integrationstests verwenden echte Keycloak-Tokens
+und die RC1-Testdatenbank. Die PUT-Faelle fuer Bruno stehen noch aus.
 
 `StudentWriteService.update` validiert ID, Versionsangabe und vollstaendigen
 Body vor dem Datenbankzugriff. Lese- und Schreibservice verwenden dasselbe
