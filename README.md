@@ -840,6 +840,21 @@ Integrationstests und Bruno verwendet; TLS-Vertrauen ist explizit konfiguriert.
 Die vorhandene Keycloak-Einrichtung ist damit fuer die Anwendung angebunden
 (#29); Token-Pruefung und Rollenfreigaben sind durchgaengig geprueft (#30/#31).
 
+Fuer PUT mit Versionsschutz (#32) ist die Repository-Methode `update` vorbereitet.
+Sie prueft ID und erwartete Version direkt im SQL-UPDATE, erhoeht die Version
+und setzt `aktualisiert` in derselben Transaktion wie Adresse und Leistungen.
+`erzeugt` bleibt erhalten. Die Adresse wird ueber den eindeutigen
+Student-Fremdschluessel aktualisiert oder bei Fehlen angelegt; eine vorhandene
+Adress-ID bleibt erhalten. Die Leistungsliste wird vollstaendig ersetzt,
+ihre technischen IDs werden neu vergeben. Eine leere Liste entfernt alle
+bisherigen Leistungen dieses Studenten.
+Ohne passendes ID-/Versionspaar liefert die Methode `undefined` und laesst
+die Kinddaten unveraendert. DB-Fehler brechen die gesamte Transaktion ab.
+Lokale Tests pruefen das von Drizzle erzeugte SQL und die Transaktionssteuerung
+mit ersetztem pg-Treiber. Echte PostgreSQL-Pruefungen fuer konkurrierende
+Updates und Rollback stehen noch aus. Service, PUT-Route und HTTP-Fehlerzuordnung
+sind noch nicht angebunden; PUT ist noch nicht verfuegbar.
+
 ## Team
 
 - [@Freud170](https://github.com/Freud170)
