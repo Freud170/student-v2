@@ -585,7 +585,7 @@ Keycloak-Access-Token mit der Client-Rolle `admin` oder `student`.
 wie POST, ein Bearer-Token fuer `admin` oder `student` und `If-Match` mit dem
 zuletzt gelesenen starken ETag, z.B. `"0"`. Bei Erfolg kommt 204 ohne Body mit
 dem neuen ETag, z.B. `"1"`. Unbekannte IDs werden nicht neu angelegt.
-Authentifizierung und Rollenpruefung laufen zuerst, danach werden Pfad-ID,
+Authentifizierung und Rollenpruefung laufen zuerst, danach Content-Encoding, Pfad-ID,
 Vorhandensein von `If-Match` und JSON geprueft. Die fachliche Validierung und
 Versionspruefung uebernimmt der Service. CORS erlaubt PUT und `If-Match`;
 der ETag ist fuer Browser freigegeben. OPTIONS benoetigt kein Token.
@@ -613,20 +613,27 @@ anschliessende Wiederverwendbarkeit des Pools.
 
 Globale Middleware setzt Security-Header (u.a. HSTS und `nosniff`), CORS und
 Antwortkompression mit `hono/compress`. Die erlaubten Browser-Origins stehen in
-`[cors].origins` in `src/config/config.toml`; aktuell sind nur `GET` und `HEAD`
+`[cors].origins` in `src/config/config.toml`; `GET`, `HEAD`, `POST` und `PUT` sind
 freigegeben. Preflights erhalten Status 204. Nicht freigegebene Origins erhalten
 keinen `Access-Control-Allow-Origin`-Header; CORS ersetzt keine Authentifizierung.
 Die Hono-Optionen heissen `allowHeaders` und `exposeHeaders`.
 
 Antworten werden bei passendem `Accept-Encoding` mit gzip oder deflate komprimiert.
-`hono/compress` komprimiert keine eingehenden Request-Bodies. Die entsprechende
-Anforderung wird im offenen Issue #41 weitergefuehrt; fuer die spaeteren
-Schreibendpunkte muss die Behandlung komprimierter Requests festgelegt werden.
+POST und PUT akzeptieren nur unkomprimierte Request-Bodies: ohne
+`Content-Encoding` oder mit dem einzelnen Wert `identity` (Gross-/Kleinschreibung
+und umgebende Leerzeichen werden ignoriert). Andere Werte wie `gzip`, `br`,
+`deflate`, leere Header oder Kodierungslisten werden mit 415 als Problem Details
+und `Accept-Encoding: identity` abgelehnt (#41). Die gemeinsame Pruefung erfolgt
+nach der Rollenpruefung und vor Body-Lesen, JSON-Parsing und Schreibservice;
+bei PUT auch vor der If-Match-Pruefung. Es findet keine Dekompression statt.
+CORS erlaubt `Content-Encoding`, damit auch Browser die Antwort erhalten.
+Lokale Tests pruefen echte gzip-Bytes, ungelesene Bodies und ausbleibende
+Service-Aufrufe; echte HTTP-/Bruno-Pruefungen folgen im Integrationspaket.
 
 `X-Response-Time` misst die Bearbeitungszeit bis zur fertigen Response, ohne die
 anschliessende Netzwerkuebertragung. Fehler und Preflights werden ebenfalls
 protokolliert. Unerwartete Fehler liefern eine allgemeine JSON-Antwort mit Status
-500; die fachlichen Fehlerfaelle aus Issue #22 folgen mit den REST-Funktionen.
+500; fachliche Fehler werden wie im Abschnitt zur globalen Fehlerbehandlung abgebildet.
 
 ## Logging
 

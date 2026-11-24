@@ -81,12 +81,14 @@ describe('Berechtigungsmatrix der zusammengesetzten App', () => {
             headers: {
                 Origin: origin,
                 'Access-Control-Request-Method': method,
-                'Access-Control-Request-Headers': 'Authorization,Content-Type,If-Match',
+                'Access-Control-Request-Headers':
+                    'Authorization,Content-Type,Content-Encoding,If-Match',
             },
         });
         expect(response.status).toBe(204);
         expect(response.headers.get('Access-Control-Allow-Headers')).toContain('Authorization');
         expect(response.headers.get('Access-Control-Allow-Headers')).toContain('If-Match');
+        expect(response.headers.get('Access-Control-Allow-Headers')).toContain('Content-Encoding');
         expect(response.headers.get('Access-Control-Allow-Methods')).toContain(method);
         expect(verify).not.toHaveBeenCalled();
         expect(create).not.toHaveBeenCalled();
@@ -95,6 +97,34 @@ describe('Berechtigungsmatrix der zusammengesetzten App', () => {
 });
 
 const unavailable = 503;
+const unsupported = 415;
+describe('Abgelehntes Content-Encoding in der zusammengesetzten App', () => {
+    test.each([
+        { method: 'POST', path: '/rest' },
+        { method: 'PUT', path: '/rest/1' },
+    ])(
+        '$method liefert 415 mit gemeinsamer Middleware ohne Schreiben',
+        async ({ method, path }) => {
+            const { app, verify, create, update, lines } = setup();
+            const response = await app.request(path, {
+                method,
+                headers: { ...headers, 'Content-Encoding': 'gzip' },
+                body: 'private-body',
+            });
+            expect(response.status).toBe(unsupported);
+            expect(response.headers.get('Content-Type')).toBe('application/problem+json');
+            expect(response.headers.get('Accept-Encoding')).toBe('identity');
+            expect(response.headers.get('Access-Control-Allow-Origin')).toBe(origin);
+            expect(response.headers.get('X-Content-Type-Options')).toBe('nosniff');
+            expect(response.headers.get('X-Response-Time')).toMatch(/^\d+\.\d{3}ms$/u);
+            expect(verify).toHaveBeenCalledOnce();
+            expect(create).not.toHaveBeenCalled();
+            expect(update).not.toHaveBeenCalled();
+            expect(lines.join('')).not.toContain('private-');
+        },
+    );
+});
+
 describe('PUT in der zusammengesetzten App', () => {
     test('PUT erreicht den Schreibservice und legt den ETag fuer CORS offen', async () => {
         const { app, verify, update, create } = setup();

@@ -7,7 +7,14 @@ export const getCorsOptions = (config: Config['cors']): Parameters<typeof cors>[
     return {
         origin: config.origins,
         allowMethods: ['GET', 'HEAD', 'POST', 'PUT'],
-        allowHeaders: ['Accept', 'Content-Type', 'Authorization', 'If-Match', 'If-None-Match'],
+        allowHeaders: [
+            'Accept',
+            'Content-Type',
+            'Content-Encoding',
+            'Authorization',
+            'If-Match',
+            'If-None-Match',
+        ],
         exposeHeaders: ['ETag', 'Location', 'X-Response-Time'],
         maxAge: MAX_AGE,
         credentials: false,

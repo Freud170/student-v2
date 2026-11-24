@@ -7,6 +7,7 @@ export const badRequest = 400;
 export const unauthorized = 401;
 export const forbidden = 403;
 export const preconditionFailed = 412;
+export const unsupportedMediaType = 415;
 export const unprocessableContent = 422;
 export const preconditionRequired = 428;
 export const serviceUnavailable = 503;
@@ -24,6 +25,7 @@ const titles: Partial<Record<ProblemStatusCode, string>> = {
     [unauthorized]: 'Unauthorized',
     [forbidden]: 'Forbidden',
     [preconditionFailed]: 'Precondition Failed',
+    [unsupportedMediaType]: 'Unsupported Media Type',
     [unprocessableContent]: 'Unprocessable Content',
     [preconditionRequired]: 'Precondition Required',
     [serviceUnavailable]: 'Service Unavailable',
