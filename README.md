@@ -875,6 +875,10 @@ unterscheiden ungueltige Versionsangaben von Versionskonflikten. Ihre Meldungen
 enthalten keine uebernommenen Headerwerte. Verwendung im Update-Service und
 Zuordnung zu HTTP-Antworten stehen noch aus.
 
+Der Leseservice verwendet das gemeinsame `StudentIdSchema`: positive ganze
+Zahlen von 1 bis 2147483647. Die bisherigen ID-Regeln bleiben erhalten und
+stehen damit auch fuer die kommende Update-Service-Anbindung bereit.
+
 ## Team
 
 - [@Freud170](https://github.com/Freud170)

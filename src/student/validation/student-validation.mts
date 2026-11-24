@@ -5,14 +5,16 @@ import { z } from 'zod';
 
 const MAX_LENGTH_TEXT = 64;
 const MAX_LENGTH_USERNAME = 20;
-const MAX_VERSION = 2_147_483_647;
+const MAX_INTEGER = 2_147_483_647;
+
+export const StudentIdSchema = z.number().int().positive().max(MAX_INTEGER);
 
 // Ein einzelner starker ETag in der Form, die GET fuer die Version erzeugt.
 export const IfMatchSchema = z
     .string()
     .regex(/^"(?:0|[1-9]\d*)"$/u)
     .transform((value) => Number(value.slice(1, -1)))
-    .pipe(z.number().int().nonnegative().max(MAX_VERSION));
+    .pipe(z.number().int().nonnegative().max(MAX_INTEGER));
 
 // Zulaessige Notenstufen wie im CHECK-Constraint der Tabelle pruefungsleistung
 // oxlint-disable-next-line no-magic-numbers
