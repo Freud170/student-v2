@@ -852,32 +852,29 @@ Ohne passendes ID-/Versionspaar liefert die Methode `undefined` und laesst
 die Kinddaten unveraendert. DB-Fehler brechen die gesamte Transaktion ab.
 Lokale Tests pruefen das von Drizzle erzeugte SQL und die Transaktionssteuerung
 mit ersetztem pg-Treiber. Echte PostgreSQL-Pruefungen fuer konkurrierende
-Updates und Rollback stehen noch aus. Service, PUT-Route und HTTP-Fehlerzuordnung
-sind noch nicht angebunden; PUT ist noch nicht verfuegbar.
+Updates und Rollback stehen noch aus. PUT-Route und HTTP-Fehlerzuordnung sind
+noch nicht angebunden; PUT ist noch nicht verfuegbar.
 
-Die Eindeutigkeitsabfrage `StudentRepository.existsBy` kann fuer Aenderungen
-die eigene Student-ID ausschliessen. Dadurch gelten eigene unveraenderte Werte
-nicht als Duplikate. Ohne diese optionale ID bleibt die Pruefung fuer POST
-unveraendert. Die Nutzung im Update-Service folgt im naechsten Service-Paket.
+`StudentWriteService.update` validiert ID, Versionsangabe und vollstaendigen
+Body vor dem Datenbankzugriff. Lese- und Schreibservice verwenden dasselbe
+`StudentIdSchema` fuer ganze Zahlen von 1 bis 2147483647. Das `StudentUpdateSchema`
+verwendet dieselben fachlichen Pflichtfelder wie POST, einschliesslich Adresse
+und Leistungsliste; IDs, Version und Zeitstempel im Body werden abgelehnt.
+Noten werden fuer Drizzle in dezimale Strings umgewandelt.
 
-Das vorbereitete `StudentUpdateSchema` verwendet fuer PUT dieselben fachlichen
-Pflichtfelder und Zod-Regeln wie POST, einschliesslich Adresse und vollstaendiger
-Leistungsliste. IDs, Version und Zeitstempel im Body werden abgelehnt. Die
-Validierungstests pruefen beide Schemata; die Service-Anbindung steht noch aus.
+`IfMatchSchema` akzeptiert einen einzelnen starken ETag wie `"0"` mit einer
+Versionsnummer von 0 bis 2147483647. Fuehrende Nullen, schwache ETags, Listen
+und `*` werden nicht unterstuetzt. `VersionInvalidError` kennzeichnet ungueltige
+Versionsangaben, `VersionOutdatedError` eine Abweichung vom gespeicherten Stand.
+Beide Meldungen enthalten keine uebernommenen Headerwerte. Unbekannte oder
+inzwischen geloeschte Studierende ergeben `NotFoundError`.
 
-`IfMatchSchema` bereitet die Versionsvalidierung vor: ein einzelner starker ETag
-wie `"0"` wird in eine ganze Zahl von 0 bis 2147483647 umgewandelt. Fuehrende
-Nullen, schwache ETags, Listen und `*` werden nicht unterstuetzt. Die Pruefung
-gegen die gespeicherte Version und die HTTP-Fehlerzuordnung folgen separat.
-
-Die vorbereiteten Fehlerklassen `VersionInvalidError` und `VersionOutdatedError`
-unterscheiden ungueltige Versionsangaben von Versionskonflikten. Ihre Meldungen
-enthalten keine uebernommenen Headerwerte. Verwendung im Update-Service und
-Zuordnung zu HTTP-Antworten stehen noch aus.
-
-Der Leseservice verwendet das gemeinsame `StudentIdSchema`: positive ganze
-Zahlen von 1 bis 2147483647. Die bisherigen ID-Regeln bleiben erhalten und
-stehen damit auch fuer die kommende Update-Service-Anbindung bereit.
+Matrikelnummer, E-Mail und Username werden ueber `StudentRepository.existsBy`
+unter Ausschluss der eigenen ID geprueft; eigene unveraenderte Werte sind
+dadurch erlaubt. Diese Vorpruefung ersetzt keine Datenbank-Constraints.
+Der atomare Versionsvergleich im Repository entscheidet ueber das Schreiben;
+bei einem Konflikt erfolgt keine automatische Wiederholung. Service-Tests
+pruefen diese Faelle mit ersetztem Repository, ohne externe Dienste.
 
 ## Team
 

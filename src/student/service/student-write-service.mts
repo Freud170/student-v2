@@ -1,17 +1,30 @@
+import {
+    IfMatchSchema,
+    StudentIdSchema,
+    type StudentNeu,
+    StudentUpdateSchema,
+} from '../validation/student-validation.mts';
+import {
+    NotFoundError,
+    UniqueError,
+    VersionInvalidError,
+    VersionOutdatedError,
+} from './errors.mts';
 import { type StudentRepository, type UniqueSpalte } from '../repository/student-repository.mts';
 import { type Logger } from 'pino';
-import { type StudentNeu } from '../validation/student-validation.mts';
-import { UniqueError } from './errors.mts';
 
 // Reihenfolge der Pruefung; gemeldet wird der erste bereits vergebene Wert
 const UNIQUE_SPALTEN: readonly UniqueSpalte[] = ['matrikelnummer', 'email', 'username'];
 
-/** Schreibzugriffe auf das Student-Aggregate (wie buch-write-service im Prof-Beispiel). */
+/** Validierung und Geschaeftslogik fuer Schreibzugriffe auf das Student-Aggregate. */
 export class StudentWriteService {
     readonly #logger: Logger;
-    readonly #repository: Pick<StudentRepository, 'create' | 'existsBy'>;
+    readonly #repository: Pick<StudentRepository, 'create' | 'existsBy' | 'findById' | 'update'>;
 
-    public constructor(logger: Logger, repository: Pick<StudentRepository, 'create' | 'existsBy'>) {
+    public constructor(
+        logger: Logger,
+        repository: Pick<StudentRepository, 'create' | 'existsBy' | 'findById' | 'update'>,
+    ) {
         this.#logger = logger;
         this.#repository = repository;
     }
@@ -40,10 +53,52 @@ export class StudentWriteService {
         return id;
     }
 
-    async #checkUnique(studentNeu: StudentNeu): Promise<void> {
+    /** Validiert und ersetzt ein Aggregate; liefert die vom Repository gespeicherte Version. */
+    async update(id: number, daten: unknown, versionHeader: string): Promise<number> {
+        this.#logger.debug('update: id=%d', id);
+        if (!StudentIdSchema.safeParse(id).success) {
+            throw new NotFoundError(`Ungueltige ID ${id}`);
+        }
+        const parsedVersion = IfMatchSchema.safeParse(versionHeader);
+        if (!parsedVersion.success) {
+            throw new VersionInvalidError();
+        }
+        const studentUpdate = StudentUpdateSchema.parse(daten);
+        const vorhanden = await this.#repository.findById(id);
+        if (vorhanden === undefined) {
+            throw new NotFoundError(`Es gibt keinen Studierenden mit der ID ${id}`);
+        }
+        const version = parsedVersion.data;
+        if (vorhanden.version !== version) {
+            throw new VersionOutdatedError();
+        }
+        await this.#checkUnique(studentUpdate, id);
+
+        const { adresse, pruefungsleistungen, ...student } = studentUpdate;
+        const neueVersion = await this.#repository.update(id, version, {
+            student,
+            adresse,
+            pruefungsleistungen: pruefungsleistungen.map(({ note, ...leistung }) => {
+                return { ...leistung, note: note.toFixed(1) };
+            }),
+        });
+        // Die Vorpruefung ersetzt nicht den atomaren Versionsvergleich beim Schreiben.
+        if (neueVersion === undefined) {
+            if ((await this.#repository.findById(id)) === undefined) {
+                throw new NotFoundError(`Es gibt keinen Studierenden mit der ID ${id}`);
+            }
+            throw new VersionOutdatedError();
+        }
+        this.#logger.debug('update: id=%d, version=%d', id, neueVersion);
+        return neueVersion;
+    }
+
+    async #checkUnique(studentNeu: StudentNeu, eigeneId?: number): Promise<void> {
         // Die drei Abfragen laufen parallel
         const vergeben = await Promise.all(
-            UNIQUE_SPALTEN.map((spalte) => this.#repository.existsBy(spalte, studentNeu[spalte])),
+            UNIQUE_SPALTEN.map((spalte) =>
+                this.#repository.existsBy(spalte, studentNeu[spalte], eigeneId),
+            ),
         );
         const index = vergeben.indexOf(true);
         const spalte = UNIQUE_SPALTEN[index];

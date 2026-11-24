@@ -24,6 +24,8 @@ const setup = () => {
     const repository = {
         create: vi.fn<StudentRepository['create']>().mockResolvedValue(NEUE_ID),
         existsBy: vi.fn<StudentRepository['existsBy']>().mockResolvedValue(false),
+        findById: vi.fn<StudentRepository['findById']>(),
+        update: vi.fn<StudentRepository['update']>(),
     };
     const service = new StudentWriteService(pino({ level: 'silent' }), repository);
     return { repository, service };
@@ -56,9 +58,9 @@ describe('StudentWriteService: create', () => {
         const { service, repository } = setup();
         await service.create(studentNeu);
 
-        expect(repository.existsBy).toHaveBeenCalledWith('matrikelnummer', '111111');
-        expect(repository.existsBy).toHaveBeenCalledWith('email', 'theo.test@h-ka.de');
-        expect(repository.existsBy).toHaveBeenCalledWith('username', 'theo');
+        expect(repository.existsBy).toHaveBeenCalledWith('matrikelnummer', '111111', undefined);
+        expect(repository.existsBy).toHaveBeenCalledWith('email', 'theo.test@h-ka.de', undefined);
+        expect(repository.existsBy).toHaveBeenCalledWith('username', 'theo', undefined);
     });
 
     test.each(['matrikelnummer', 'email', 'username'] as const)(
