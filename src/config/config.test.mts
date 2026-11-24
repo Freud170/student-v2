@@ -11,6 +11,11 @@ describe('Konfiguration', () => {
         expect(config.log.output).toBe('both');
         expect(config.cors.origins).toContain('https://localhost:5173');
         expect(config.db.database).toBe('student');
+        expect(config.keycloak.issuer).toBe('https://localhost:8843/realms/student');
+        expect(config.keycloak.jwksUri).toBe(
+            `${config.keycloak.issuer}/protocol/openid-connect/certs`,
+        );
+        expect(config.keycloak.caFile).toBe('src/config/tls/certificate.crt');
     });
 
     test('fehlende optionale Abschnitte verwenden Defaults', () => {
@@ -23,6 +28,9 @@ describe('Konfiguration', () => {
             output: 'console',
             pretty: false,
         });
+        expect(config.keycloak.issuer).toBe('https://localhost:8843/realms/student');
+        expect(config.keycloak.clientId).toBe('student-client');
+        expect(config.keycloak.audience).toStrictEqual(['account']);
     });
 
     test.each([

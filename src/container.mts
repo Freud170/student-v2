@@ -6,6 +6,8 @@ import { StudentService } from './student/service/student-service.mts';
 import { StudentWriteService } from './student/service/student-write-service.mts';
 import { createDbPopulate } from './config/dev/db-populate.mts';
 import { createLogger } from './logger/logger.mts';
+import { createRolesRequired } from './security/roles-required.mts';
+import { createTokenVerifier } from './security/token-verifier.mts';
 
 /** Einmal beim Start erzeugen: dieselben Instanzen fuer alle Requests der App. */
 export const createContainer = (
@@ -14,10 +16,13 @@ export const createContainer = (
     logger: Logger = createLogger(config.log),
 ) => {
     const studentRepository = new StudentRepository(database.db);
+    const tokenVerifier = createTokenVerifier(config.keycloak);
     return {
         config,
         logger,
         database,
+        tokenVerifier,
+        rolesRequired: createRolesRequired(tokenVerifier, config.keycloak.clientId),
         studentRepository,
         studentService: new StudentService(
             logger.child({ service: 'StudentService' }),

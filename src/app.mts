@@ -1,4 +1,4 @@
-// Wie im Beispiel der Vorlesung: app.mts setzt alles zusammen und braucht mehr Imports
+// Zentrale Komposition von Routern und Middleware.
 // oxlint-disable import/max-dependencies
 import { type Container } from './container.mts';
 import { Hono } from 'hono';
@@ -23,6 +23,7 @@ export const createApp = ({
     studentWriteService,
     database,
     dbPopulate,
+    rolesRequired,
 }: Container): Hono => {
     const app = new Hono();
     const httpLogger = logger.child({ module: 'http' });
@@ -33,11 +34,11 @@ export const createApp = ({
 
     app.route('/', createRootRouter());
     app.route('/rest', createStudentRouter(studentService));
-    app.route('/rest', createStudentWriteRouter(studentWriteService));
+    app.route('/rest', createStudentWriteRouter(studentWriteService, rolesRequired));
     app.route('/health', createHealthRouter(database.check, logger.child({ module: 'health' })));
     // Nur in der Entwicklung, d.h. mit "populate = true" in config.toml
     if (config.db.populate) {
-        app.route('/dev', createDevRouter(dbPopulate));
+        app.route('/dev', createDevRouter(dbPopulate, rolesRequired));
     }
 
     app.notFound((c) => c.json({ msg: 'Nicht gefunden' }, 404));

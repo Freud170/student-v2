@@ -1,5 +1,5 @@
 import { CONTENT_TYPE, LOCATION, restURL } from '../constants.mts';
-import { describe, expect, test } from 'vitest';
+import { describe, expect, inject, test } from 'vitest';
 
 // -----------------------------------------------------------------------------
 // T e s t d a t e n
@@ -26,7 +26,10 @@ const PROBLEM_JSON = 'application/problem+json';
 const post = (body: string) =>
     fetch(restURL, {
         method: 'POST',
-        headers: { [CONTENT_TYPE]: 'application/json' },
+        headers: {
+            [CONTENT_TYPE]: 'application/json',
+            Authorization: `Bearer ${inject('adminToken')}`,
+        },
         body,
     });
 

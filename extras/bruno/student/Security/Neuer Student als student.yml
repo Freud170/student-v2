@@ -1,0 +1,37 @@
+info:
+  name: Neuer Student als student
+  type: http
+  seq: 5
+
+http:
+  method: POST
+  url: "{{baseUrl}}/rest"
+  auth:
+    type: bearer
+    token: "{{studentToken}}"
+  headers:
+    - name: Content-Type
+      value: application/json
+  body:
+    type: json
+    data: |-
+      {
+          "matrikelnummer": "777778",
+          "nachname": "Zugriff",
+          "vorname": "Tina",
+          "email": "zugriff.bruno@h-ka.de",
+          "username": "zugriff-bruno",
+          "adresse": { "plz": "53111", "ort": "Bonn" },
+          "pruefungsleistungen": []
+      }
+
+runtime:
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "201"
+
+settings:
+  encodeUrl: true
+  timeout: 5000
+  followRedirects: false

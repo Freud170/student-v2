@@ -46,8 +46,8 @@ muss Port 3000 frei sein, insbesondere darf dort nicht bereits die Anwendung aus
 der ersten Abgabe laufen. Beim Start werden die DB-Passwortdatei und das
 oeffentliche DB-Zertifikat aus `[db]` gelesen und der Verbindungspool erzeugt.
 Verbindungen entstehen erst bei einer DB-Abfrage, beispielsweise durch Readiness.
-Greeting und Liveness benoetigen keine DB-Verbindung. Keycloak wird noch nicht
-benoetigt; der Start laedt keine Daten oder Benutzer nach.
+Greeting und Liveness benoetigen keine DB-Verbindung. Geschuetzte Anfragen
+benoetigen Keycloak; der Start laedt keine Daten oder Benutzer nach.
 
 Der Server läuft nur mit HTTPS (HTTP/2 und TLS 1.3, zusätzlich HTTP/1.1 für Bruno).
 Zertifikat und privater Schlüssel liegen in `src/config/tls/`. Das Zertifikat ist
@@ -267,8 +267,8 @@ Alle externen Daten- und TLS-Volumes bleiben erhalten. Solange die App laeuft,
 den gemeinsamen App-Einstieg fuer den Stack verwenden; `down` in einem
 Backend-Unterverzeichnis wuerde benoetigte Dienste stoppen. Vor dem Wechsel
 zur ersten Abgabe den gesamten Stack stoppen und seine Container entfernen.
-Die Anwendung prueft noch keine Keycloak-Tokens; Authentifizierung und
-Rollenpruefung folgen mit #30/#31.
+POST und der Dev-Endpunkt verwenden den Token-Verifier und die Rollen-Middleware.
+GET/HEAD sowie Health bleiben ohne Token erreichbar.
 
 Geprueft sind vier gesunde Dienste, App-HTTPS mit TLS 1.3 ueber HTTP/1.1 und
 HTTP/2, Liveness, Readiness, vollstaendige REST-Aggregate sowie ETag/304 und 404.
@@ -283,6 +283,110 @@ Der geordnete SIGTERM-Shutdown ist geprueft: App und Beta4-PostgreSQL endeten
 mit Exitcode 0, Keycloak mit 143 und protokolliertem vollstaendigem Shutdown.
 Die regulaeren Integrationstests laden Testdaten neu und gehoeren nicht zu
 dieser lesenden Compose-Pruefung.
+
+## Keycloak-Konfiguration
+
+Der TOML-Abschnitt `[keycloak]` wird beim Laden mit Zod validiert und vom
+Token-Verifier verwendet. Die Rollen-Middleware schuetzt POST und den
+Dev-Endpunkt anhand der Client-Rollen in verifizierten Access-Tokens (#30/#31).
+
+| Einstellung | Lokaler App-Start | App im Compose-Stack |
+|---|---|---|
+| `issuer` | `https://localhost:8843/realms/student` | identisch |
+| `jwksUri` | `https://localhost:8843/realms/student/protocol/openid-connect/certs` | `https://keycloak:8443/realms/student/protocol/openid-connect/certs` |
+| `clientId` | `student-client` | identisch |
+| `audience` | `["account"]` | identisch |
+| `caFile` | `src/config/tls/certificate.crt` | `/run/config/student-certificate.crt` |
+
+Tokens sollen ueber `https://localhost:8843` bezogen werden. Ihr erwarteter
+Issuer bleibt auch fuer die App im Container dieser externe Name; nur der
+Abruf der oeffentlichen Signaturschluessel verwendet die interne Adresse.
+Bei einem anderen Realm oder Zugang beide URLs explizit konfigurieren.
+HTTPS-URLs mit Zugangsdaten, Query oder Fragment sowie leere Client-IDs,
+Audience-Listen/-Eintraege und Zertifikatspfade werden abgelehnt.
+Die Audience `account` ist mit echten Access-Tokens bestaetigt: Studierende
+haben `aud = "account"`, der Administrator `aud = ["realm-management", "account"]`.
+Beide Token-Typen enthalten `azp = "student-client"` und `typ = "Bearer"`.
+
+Das vorhandene App-Zertifikat stimmt per SHA-256 mit `kc_cert` im Volume
+`kc_tls` ueberein und deckt `localhost` sowie `keycloak` ab. Der bestehende
+read-only Mount reicht deshalb als Vertrauensanker. Bei einer spaeteren
+Trennung der Zertifikate muss `caFile` auf das Keycloak-Zertifikat zeigen.
+Die Konfigurationsvalidierung liest die Zertifikatsdatei noch nicht und
+stellt keine Netzwerkverbindung her. Der Verifier liest das Zertifikat erst
+beim ersten Schluesselabruf und verwendet es ausschliesslich fuer diese Verbindung.
+
+Realm, Client, Client-Rollen `admin`/`student` und Benutzer werden aus dem
+vorhandenen Keycloak weiterverwendet. Fuer die Pruefung von Signaturen ist
+kein Client-Secret vorgesehen. Ein Token-Bezug fuer Tests wird gesondert
+angebunden; Zugangsdaten gehoeren nicht in TOML oder Logs.
+
+### Token-Verifier
+
+`createContainer` erzeugt eine gemeinsame `tokenVerifier`-Instanz.
+`verify(token)` prueft mit `jose` 6.2.15 die RS256-Signatur, den JWT-Header-Typ,
+Issuer, Audience und die Pflicht-Claims `exp`, `iat` und `sub`. Abgelaufene,
+noch nicht gueltige oder in der Zukunft ausgestellte Tokens werden abgelehnt.
+Zusaetzlich werden `typ = "Bearer"`, `azp = "student-client"` und ein
+nichtleeres Subject verlangt. ID- und Refresh-Tokens sind keine Access-Tokens.
+Die Methode liefert nur erfolgreich verifizierte Claims zurueck; die
+Rollenentscheidung bleibt der nachfolgenden Middleware vorbehalten.
+
+JWKS werden ausschliesslich von der konfigurierten HTTPS-Adresse geladen,
+mit CA- und Hostnamenpruefung sowie TLS 1.3. Redirects werden abgelehnt,
+Antworten auf 1 MiB begrenzt. Der jose-Cache gilt pro Verifier: maximal zehn
+Minuten, fuenf Sekunden Abruf-Timeout und 30 Sekunden Mindestabstand fuer
+erneutes Laden bei unbekannter Schluessel-ID. Parallele Abrufe werden gebuendelt.
+Es werden keine Keep-Alive-Verbindungen offengehalten.
+
+Ungueltige Tokens ergeben `UnauthorizedError`; nicht abrufbare oder unbrauchbare
+Schluessel ergeben `KeycloakUnavailableError`. Die Fehler enthalten weder Tokens
+noch Claims oder urspruengliche JOSE-Payloads. Die zentrale Fehlerbehandlung
+bildet sie auf 401 bzw. 503 ab; fehlende Rollen ergeben 403.
+
+Geprueft sind lokale RSA- und HTTPS-Tests sowie echte Access-Tokens fuer die
+vorhandenen Rollen `admin` und `student`. Die Live-Pruefung bestaetigt Discovery,
+TLS 1.3 und die Ablehnung falscher Issuer/Audiences, fremder CA, manipulierter
+Signaturen und ID-Tokens. Beide Testanmeldungen wurden ausgeloggt; alle 100
+Keycloak-Tabellen und die drei Studierendentabellen der Beta4-Datenbank hatten
+anschliessend identische Pruefsummen. Die dafuer gestarteten Dienste wurden
+beendet und die Testcontainer entfernt. Die RC1-Datenbank wurde nicht gestartet.
+
+### Rollen und Endpunktschutz
+
+| Endpunkt | Erforderliche Berechtigung |
+|---|---|
+| `POST /rest` | Client-Rolle `admin` oder `student` |
+| `QUERY /dev/db_populate` | Client-Rolle `admin`; nur mit `populate = true` |
+| GET/HEAD fuer `/`, `/rest`, `/rest/:id` und Health | Oeffentlich |
+| CORS-Preflight mit OPTIONS | Kein Token erforderlich |
+
+Geschuetzte Anfragen senden `Authorization: Bearer <Access-Token>`.
+Nur Rollen unter `resource_access.student-client.roles` zaehlen;
+Realm-Rollen und Rollen anderer Clients erteilen keinen Zugriff.
+Die Rollenpruefung erfolgt vor JSON-Validierung, Schreibservice und DB-Neuladen.
+Ein fehlendes, fehlerhaftes oder ungueltiges Token ergibt 401 mit
+`WWW-Authenticate: Bearer`. Ein gueltiges Token ohne passende Client-Rolle
+ergibt 403. Nicht verfuegbare oder unbrauchbare JWKS ergeben 503.
+Diese Antworten verwenden `application/problem+json` und durchlaufen weiterhin
+CORS, Security-Header, Antwortzeitmessung und das Logging ohne Token-Inhalte.
+
+Die Rollen-Middleware wird mit dem gemeinsamen Verifier ueber den DI-Container
+bereitgestellt. Unit-Tests pruefen die Zugriffsmatrix und stellen sicher, dass
+abgelehnte Anfragen keine schreibenden Services erreichen. Integrationstests
+und Bruno verwenden echte Anmeldungen der vorhandenen Testbenutzer. Passwoerter
+stehen nur in ignorierten lokalen `.env`-Dateien, Tokens nur im Arbeitsspeicher.
+Nach den Testlaeufen werden beide Anmeldungen bei Keycloak beendet.
+
+Der Security-Abschluss wurde mit 243 Unit-Tests, 34 Integrationstests und der
+Bruno-Collection (33 Anfragen, 73 Assertions) geprueft. Im neu gebauten
+Compose-App-Container wurden echte Tokens beider Rollen ueber die interne
+JWKS-Adresse akzeptiert; unautorisierte Anfragen lieferten 401 und der
+deaktivierte Dev-Endpunkt 404. Die Pruefsummen aller 100 Keycloak-Tabellen
+und der Studierendentabellen beider PostgreSQL-Instanzen waren danach
+unveraendert. Die RC1-Fixtures wurden nach den schreibenden Tests wiederhergestellt.
+Alle dafuer gestarteten Dienste und Testcontainer wurden anschliessend beendet
+und entfernt; Datenvolumes und Zertifikate blieben erhalten.
 
 ## Anwendungsbasis
 
@@ -430,7 +534,7 @@ werden explizit an die Router und Services uebergeben.
 | `GET /rest/:id` | 200 mit Studierendem als JSON und `ETag` (Version); unbekannte oder ungueltige ID: 404 |
 | `GET /rest/:id` mit `If-None-Match` | Version unveraendert: 304 ohne Body |
 | `GET /rest?nachname=…` | 200 mit Liste der Treffer; ohne Parameter alle; keine Treffer oder ungueltige Parameter: 404 |
-| `POST /rest` | 201 mit `Location`-Header (ohne Body); ungueltige Daten oder vergebene Matrikelnummer/Email/Username: 422; kein JSON: 400 |
+| `POST /rest` | `admin` oder `student`; 201 mit `Location`-Header (ohne Body); ungueltige Daten oder vergebene Matrikelnummer/Email/Username: 422; kein JSON: 400 |
 | `GET /health/liveness` | Status 200 mit `{"status":"up"}` |
 | `GET /health/readiness` | `SELECT 1` erfolgreich: 200 mit `{"status":"up"}`; DB-Fehler: 503 mit `{"status":"down"}` |
 | `HEAD /`, `HEAD /rest` | Dieselben Statuscodes und Header, ohne Response-Body |
@@ -442,12 +546,11 @@ sowie `matrikelnummer` (6 Ziffern), `email` und `plz` (5 Ziffern, jeweils exakt)
 Ein `Accept`-Header ohne JSON (z.B. `text/plain`) liefert 406. Die Antwort ist ein
 `StudentDTO` (`src/student/router/student-dto.mts`): Adresse und Pruefungsleistungen
 ohne interne IDs, Noten als Zahl. Der `ETag` ist die Version in Anfuehrungszeichen,
-z.B. `"0"`. `If-None-Match` wird wie im Beispiel der Vorlesung exakt verglichen.
+z.B. `"0"`. `If-None-Match` wird exakt verglichen.
 Bekannte Einschränkung: Bei gzip-komprimierten Antworten macht `hono/compress` daraus
 ein schwaches `W/"0"`; sendet ein Client das zurück (z.B. ein Browser), gibt es 200
 statt 304. Für Tests mit Bruno und Vitest (`If-None-Match: "0"`) spielt das keine
-Rolle. Paging, PUT, DELETE, GraphQL und
-Keycloak-Anbindung folgen mit den jeweiligen Funktionen. `Student` bleibt das
+Rolle. Paging, PUT, DELETE und GraphQL folgen mit den jeweiligen Funktionen. `Student` bleibt das
 zentrale Aggregate mit Adresse (1:1) und Pruefungsleistungen (1:N).
 
 **Neuanlegen mit POST:** Der Request-Body wird mit Zod geprueft
@@ -471,10 +574,10 @@ ueblichen Stufen sowie 5.0, Semester wie `WS 2026/27` oder `SS 2026`; die Liste 
 Pruefungsleistungen darf leer sein. Der `StudentWriteService` prueft vorab, ob
 Matrikelnummer, Email oder Username schon vergeben sind (`UniqueError`), und legt
 Studierenden, Adresse und Leistungen ueber das Repository in einer Transaktion an.
-`erzeugt` und `aktualisiert` setzt der Service. POST ist noch nicht durch Keycloak
-geschuetzt; Rollen folgen mit #30/#31.
+`erzeugt` und `aktualisiert` setzt der Service. POST verlangt ein gueltiges
+Keycloak-Access-Token mit der Client-Rolle `admin` oder `student`.
 
-**Globale Fehlerbehandlung** (`src/error-handler.mts`, wie im Beispiel der Vorlesung):
+**Globale Fehlerbehandlung** (`src/error-handler.mts`):
 Der Service wirft eigene Fehlerklassen (`src/student/service/errors.mts`), Router
 fangen keine Fehler ab. `app.onError` bildet sie zentral ab: `NotFoundError` (unbekannte
 oder ungueltige ID, ungueltige Suchparameter, keine Treffer) → 404, `ZodError` und
@@ -539,28 +642,48 @@ Vitest hat zwei Projekte (`vitest.config.mts`): **unit** (`src/**/*.test.mts`, o
 laufende App oder Datenbank) und **integration** (`test/integration/**`, HTTP-Requests
 mit `fetch` gegen die laufende App und PostgreSQL):
 
+Fuer Integrationstests die vorhandenen Testzugangsdaten lokal eintragen:
+
 ```powershell
-cd extras\compose\postgres
-docker compose up -d            # PostgreSQL starten
-cd ..\..\..
-pnpm run dev                    # App starten (eigene PowerShell)
-pnpm run test:integration       # in einer zweiten PowerShell
-# danach App mit Strg+C beenden und in extras\compose\postgres: docker compose down
+Copy-Item test/integration/.env.example test/integration/.env  # nur falls noch nicht vorhanden
 ```
 
-Vor den Integrationstests laedt `test/integration/setup.global.mts` die DB per
+`CLIENT_SECRET` gehoert zum vorhandenen `student-client`. Die beiden
+`TEST_*_PASSWORD`-Werte sind die bestehenden Passwoerter der Benutzer mit
+Client-Rolle `admin` beziehungsweise `student`; die Vorlage nennt `admin` und
+`erika`. Die `.env` ist ignoriert. Keine neuen Benutzer oder Realm-Importe anlegen.
+Die Unit-Tests benoetigen weder diese Datei noch externe Dienste.
+
+Nach Pruefung der Volumes, Ports und Testdaten gemaess den Betriebsanleitungen:
+
+```powershell
+docker compose -f extras/compose/backend/compose.yml up -d --wait
+pnpm run start  # eigenes Terminal; keine Container-App gleichzeitig auf Port 3000
+# In einem zweiten Terminal, ebenfalls im Projektverzeichnis:
+pnpm run test:integration
+```
+
+Vor und nach den Integrationstests laedt `test/integration/setup.global.mts` die DB per
 `QUERY /dev/db_populate` neu (Tabellen neu anlegen, CSV-Testdaten importieren); jeder
-Lauf beginnt also mit denselben Daten. Der Dev-Endpunkt existiert nur mit
+Lauf beginnt und endet also mit denselben Daten. Nur in der vorgesehenen
+RC1-Testdatenbank ausfuehren: vorhandene Studierendendaten werden ersetzt.
+Der Dev-Endpunkt existiert nur mit
 `populate = true` in `[db]` von `config.toml` und nutzt fuer `COPY` den Superuser
 `postgres` ueber eine kurzlebige eigene Verbindung (`src/config/dev/db-populate.mts`).
-Er ist noch nicht durch Keycloak geschuetzt (folgt mit #31). Fuer das selbstsignierte
-Zertifikat setzt `vitest.config.mts` `NODE_TLS_REJECT_UNAUTHORIZED=0` im Testprozess.
+Er ist auf die Client-Rolle `admin` beschraenkt. Das globale Setup meldet sich
+direkt am OIDC-Token-Endpunkt an, uebergibt die Access-Tokens ueber den
+Vitest-Testkontext und meldet die Sitzungen im Teardown ab. Auch bei Fehlern
+nach einer erfolgreichen Anmeldung wird deren Logout versucht.
+`tls.mts` ergaenzt in Setup und Test-Workern ausschliesslich die konfigurierten
+App-/Keycloak-Zertifikate als Vertrauensanker; die Zertifikatspruefung bleibt aktiv.
 Die Testdateien laufen parallel; Tests, die Daten anlegen, verwenden deshalb Werte,
 die keine Suche der anderen Tests treffen.
 
 Die Tests pruefen App-Komposition, Health-Endpunkte, Middleware, Konfiguration,
 Pino-Ausgabe sowie DB-Pool-Konfiguration, Server-Lebenszyklus, Service und Repository.
-Sie verwenden keine laufenden Server und keine Datenbank-Fixtures. Die Pino-Tests
+Die Unit-Tests verwenden keine externen Dienste und keine Datenbank-Fixtures.
+JWKS-Transporttests starten kurzlebige lokale HTTPS-Server auf freien Ports.
+Die Pino-Tests
 starten eigene Node-Prozesse, pruefen deren Ausgabe und entfernen ihre temporaeren
 Logverzeichnisse unter `temp`. Pool- und Server-Lebenszyklustests simulieren
 externe Ressourcen; sie oeffnen weder einen DB-Zugang noch einen HTTP-Port.
@@ -570,7 +693,8 @@ LEFT JOINs ohne LIMIT, alle Suchfilter und die Weitergabe von DB-Fehlern.
 Service-Tests pruefen Validierung vor dem DB-Zugriff; Health-Tests pruefen
 DB-Ausfall und Erholung sowie die unabhaengige Liveness.
 Integrationstests decken Health, Suche mit ID (inkl. ETag), Suche mit Suchparametern
-und POST ab; Tests mit Keycloak und Lasttests folgen.
+und POST ab, einschliesslich POST mit beiden Client-Rollen, 401 bei fehlendem
+oder ungueltigem Token und 403 fuer DB-Neuladen mit `student`. Lasttests folgen.
 
 Die Regeln für Oxlint stehen in `oxlint.config.mts`; alle Kategorien sind als
 Fehler eingestellt, inklusive Typprüfung.
@@ -596,19 +720,38 @@ Das Ergebnis steht danach unter <http://localhost:9000>. Beenden mit `docker com
 
 ## Bruno
 
-Die Collection `extras/bruno/student` (Format „OpenCollection“ wie im Beispiel der
-Vorlesung) enthaelt Requests mit Assertions fuer Health, Suche mit ID (inkl. ETag und
-406), Suche mit Suchparametern und Neuanlegen (inkl. 400 und 422). Voraussetzung:
-PostgreSQL und die Anwendung laufen (`docker compose up -d` in
-`extras\compose\postgres`, dann `pnpm run dev`).
+Die Collection `extras/bruno/student` (Format „OpenCollection“)
+enthaelt Requests mit Assertions fuer Health, Suche mit ID (inkl. ETag und
+406), Suche mit Suchparametern und Neuanlegen (inkl. 400 und 422).
+Lese- und Health-Requests bleiben ohne Token nutzbar. Die komplette Collection
+benoetigt dieselbe lokale Testumgebung wie die Integrationstests: Backend mit
+RC1 und Keycloak, lokale App mit `populate = true`. Der App-Container hat keinen
+Dev-Endpunkt und eignet sich daher nicht fuer den kompletten Collection-Lauf.
 
-In Bruno die Collection ueber *Open Collection* oeffnen und z.B. per Rechtsklick
-*Run* alle Requests ausfuehren. Fuer das selbstsignierte Zertifikat die Option
-*SSL/TLS Certificate Verification* ausschalten. „Neuer Student“ gelingt nur einmal;
-danach die Testdaten mit **Dev > DB neu laden** (`QUERY /dev/db_populate`) oder per
-`reset-data.sql` zuruecksetzen (siehe
-[extras/compose/postgres/ReadMe.md](extras/compose/postgres/ReadMe.md)). Requests mit
-Authentifizierung (Keycloak), PUT, DELETE und GraphQL folgen mit den Funktionen.
+Die ausgefuellte Test-`.env` einmal nach `extras/bruno/student/.env` kopieren
+(eine vorhandene Datei erhalten). Bruno liest die Werte als `process.env.*`.
+In der App die Collection ueber *Open Collection* oeffnen und das vorhandene
+`src/config/tls/certificate.crt` als CA verwenden; TLS-Pruefung aktiviert lassen.
+Die Reihenfolge fuer einen vollstaendigen Lauf ist:
+**Keycloak → Dev → Health → REST → Security → Abschluss**.
+Die beiden Token-Anfragen setzen nur Laufzeitvariablen mit `bru.setVar`.
+POST erbt das Admin-Token; die Security-Anfragen pruefen zusaetzlich `student`
+sowie fehlende und ungueltige Tokens. Abschluss stellt die CSV-Fixtures wieder
+her, meldet beide Sitzungen ab und leert die Token-Variablen. Bei manuellen
+Einzelanfragen ebenfalls abschliessend diesen Ordner ausfuehren. Nach einem
+abgebrochenen Lauf die DB und noch vorhandene Testanmeldungen entsprechend bereinigen.
+
+Mit der zur Bruno-App passenden CLI `4.3.0` ist der komplette Lauf reproduzierbar:
+
+```powershell
+Push-Location extras/bruno/student
+pnpm dlx @usebruno/cli@4.3.0 run -r --cacert ../../../src/config/tls/certificate.crt --noproxy --reporter-skip-all-headers --reporter-skip-body
+Pop-Location
+```
+
+Keine ausfuehrlichen Reports mit Token-Antworten oder Login-Formularen speichern.
+Der Test „kein JSON“ sendet absichtlich rohe Bytes, damit der HTTP-Client daraus
+keinen gueltigen JSON-String erzeugt. PUT, DELETE und GraphQL folgen mit den Funktionen.
 
 ## Abhängigkeiten und Sicherheitslücken
 
@@ -690,6 +833,12 @@ Dev-Endpunkt neu geladen (#25). GitHub Actions prueft jeden Push mit Oxfmt, Oxli
 Docker Compose startet Anwendung, PostgreSQL und den vorhandenen Keycloak
 gemeinsam (#28). Keycloak verwendet weiterhin seine bisherige Beta4-Datenbank;
 die Studierendenanwendung verwendet die getrennte RC1-Instanz.
+Keycloak-Konfiguration und Token-Verifier mit `jose` sind umgesetzt und mit
+echten Tokens geprueft. Rollen-Middleware und Endpunktschutz fuer POST und
+DB-Neuladen sind implementiert. Echte Admin-/Student-Anmeldungen werden in
+Integrationstests und Bruno verwendet; TLS-Vertrauen ist explizit konfiguriert.
+Die vorhandene Keycloak-Einrichtung ist damit fuer die Anwendung angebunden
+(#29); Token-Pruefung und Rollenfreigaben sind durchgaengig geprueft (#30/#31).
 
 ## Team
 

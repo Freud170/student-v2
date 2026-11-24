@@ -1,5 +1,6 @@
 import { badRequest, createProblemDetails } from '../../problem-details.mts';
 import { Hono } from 'hono';
+import { type RolesRequired } from '../../security/roles-required.mts';
 import { StudentNeuSchema } from '../validation/student-validation.mts';
 import { type StudentWriteService } from '../service/student-write-service.mts';
 
@@ -11,18 +12,20 @@ const createLocation = (requestUrl: string, id: number): string => {
     return `${origin}${pathname.replace(/\/$/u, '')}/${id}`;
 };
 
-// Schreibende Routen wie buch-write-router im Prof-Beispiel; Fehler wie ZodError oder
-// UniqueError bildet die globale Fehlerbehandlung ab (error-handler.mts).
-export const createStudentWriteRouter = (service: Pick<StudentWriteService, 'create'>): Hono => {
+// Authentifizierung und Rollenpruefung laufen vor Body-Validierung und Service-Aufruf.
+export const createStudentWriteRouter = (
+    service: Pick<StudentWriteService, 'create'>,
+    rolesRequired: RolesRequired,
+): Hono => {
     const router = new Hono();
 
     // Neuanlegen, z.B. POST /rest mit JSON im Request-Body
-    router.post('/', async (c) => {
+    router.post('/', rolesRequired('admin', 'student'), async (c) => {
         let requestBody: unknown;
         try {
             requestBody = await c.req.json();
         } catch {
-            // Wie im Prof-Beispiel: kein gueltiges JSON
+            // Der Request-Body muss gueltiges JSON enthalten.
             return createProblemDetails(c, badRequest, 'Ungueltiges JSON');
         }
 

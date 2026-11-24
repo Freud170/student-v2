@@ -1,0 +1,22 @@
+info:
+  name: DB neu laden
+  type: http
+  seq: 1
+
+http:
+  method: QUERY
+  url: "{{baseUrl}}/dev/db_populate"
+  auth:
+    type: bearer
+    token: "{{adminToken}}"
+
+runtime:
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "200"
+
+settings:
+  encodeUrl: true
+  timeout: 5000
+  followRedirects: false

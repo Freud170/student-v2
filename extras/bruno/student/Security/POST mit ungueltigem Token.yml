@@ -1,0 +1,22 @@
+info:
+  name: POST mit ungueltigem Token
+  type: http
+  seq: 2
+
+http:
+  method: POST
+  url: "{{baseUrl}}/rest"
+  auth:
+    type: bearer
+    token: invalid-token
+
+runtime:
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "401"
+
+settings:
+  encodeUrl: true
+  timeout: 5000
+  followRedirects: false
