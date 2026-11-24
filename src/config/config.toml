@@ -38,3 +38,12 @@ queryTimeoutMillis = 5000
 populate = true
 admin = "postgres"
 adminPasswordFile = "extras/compose/postgres/password.txt"
+
+[keycloak]
+# Tokens ueber den lokalen HTTPS-Endpunkt beziehen; Issuer exakt pruefen.
+issuer = "https://localhost:8843/realms/student"
+jwksUri = "https://localhost:8843/realms/student/protocol/openid-connect/certs"
+clientId = "student-client"
+audience = ["account"]
+# Das vorhandene Zertifikat ist auch der Vertrauensanker fuer Keycloak.
+caFile = "src/config/tls/certificate.crt"

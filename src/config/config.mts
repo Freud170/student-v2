@@ -1,6 +1,7 @@
 // Konfigurationsdaten aus "config.toml", eingelesen durch c12 und geprueft durch Zod.
 
 import { DbConfigSchema } from './db-config.mts';
+import { KeycloakConfigSchema } from './keycloak-config.mts';
 import { fileURLToPath } from 'node:url';
 import { loadConfig } from 'c12';
 import { z } from 'zod';
@@ -27,6 +28,7 @@ const originSchema = z
 
 export const ConfigSchema = z.object({
     db: DbConfigSchema.prefault({}),
+    keycloak: KeycloakConfigSchema.prefault({}),
     server: z.object({
         port: z.number().int().min(1).max(MAX_PORT).default(DEFAULT_PORT),
         keyFile: z.string().default(fileURLToPath(new URL('key.pem', tlsURL))),

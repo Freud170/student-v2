@@ -28,3 +28,13 @@ poolConnectionTimeoutMillis = 5000
 queryTimeoutMillis = 5000
 # Kein Dev-Endpunkt zum Neuladen; kein Superuser-Passwort erforderlich.
 populate = false
+
+[keycloak]
+# Auch im Container den Issuer der lokal bezogenen Tokens erwarten.
+issuer = "https://localhost:8843/realms/student"
+# Nur der Schluesselabruf verwendet die Adresse im Docker-Netz.
+jwksUri = "https://keycloak:8443/realms/student/protocol/openid-connect/certs"
+clientId = "student-client"
+audience = ["account"]
+# Vorhandener Mount; App und Keycloak verwenden dasselbe Zertifikat.
+caFile = "/run/config/student-certificate.crt"

@@ -89,8 +89,11 @@ TCP-Verbindungsaufbau allein reicht nicht.
 
 Alle Keycloak-Ports sind an `127.0.0.1` gebunden. Der bisherige HTTP-Port 8880
 bleibt verfuegbar; fuer OIDC und die Pruefungen wird HTTPS verwendet. Der
-App-Container erreicht Keycloak unter `https://keycloak:8443`. Die kanonische
-Issuer-Konfiguration der Anwendung folgt mit der Token-Pruefung (#30).
+App-Container erreicht Keycloak unter `https://keycloak:8443`. Die Anwendung
+konfiguriert `https://localhost:8843/realms/student` als erwarteten Token-Issuer
+und die interne URL separat fuer JWKS. Tokens daher ueber den lokalen
+HTTPS-Endpunkt beziehen. Details und der noch offene Stand der Token-Pruefung
+stehen in der [Keycloak-Konfiguration](../../../README.md#keycloak-konfiguration).
 
 Der bestehende Realm `student`, `student-client`, die Client-Rollen `admin`
 und `student` sowie die vorhandenen Benutzer werden weiterverwendet. Auch

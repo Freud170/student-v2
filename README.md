@@ -284,6 +284,42 @@ mit Exitcode 0, Keycloak mit 143 und protokolliertem vollstaendigem Shutdown.
 Die regulaeren Integrationstests laden Testdaten neu und gehoeren nicht zu
 dieser lesenden Compose-Pruefung.
 
+## Keycloak-Konfiguration
+
+Der TOML-Abschnitt `[keycloak]` wird beim Laden mit Zod validiert.
+Er bereitet die Token-Pruefung vor; Authentifizierung und Rollenschutz sind
+noch nicht aktiv (#30/#31).
+
+| Einstellung | Lokaler App-Start | App im Compose-Stack |
+|---|---|---|
+| `issuer` | `https://localhost:8843/realms/student` | identisch |
+| `jwksUri` | `https://localhost:8843/realms/student/protocol/openid-connect/certs` | `https://keycloak:8443/realms/student/protocol/openid-connect/certs` |
+| `clientId` | `student-client` | identisch |
+| `audience` | `["account"]` | identisch |
+| `caFile` | `src/config/tls/certificate.crt` | `/run/config/student-certificate.crt` |
+
+Tokens sollen ueber `https://localhost:8843` bezogen werden. Ihr erwarteter
+Issuer bleibt auch fuer die App im Container dieser externe Name; nur der
+Abruf der oeffentlichen Signaturschluessel verwendet die interne Adresse.
+Bei einem anderen Realm oder Zugang beide URLs explizit konfigurieren.
+HTTPS-URLs mit Zugangsdaten, Query oder Fragment sowie leere Client-IDs,
+Audience-Listen/-Eintraege und Zertifikatspfade werden abgelehnt.
+Die Audience `account` ist vorbelegt; der Abgleich mit echten Access-Tokens
+steht bei der Implementierung der Token-Pruefung noch aus.
+
+Das vorhandene App-Zertifikat stimmt per SHA-256 mit `kc_cert` im Volume
+`kc_tls` ueberein und deckt `localhost` sowie `keycloak` ab. Der bestehende
+read-only Mount reicht deshalb als Vertrauensanker. Bei einer spaeteren
+Trennung der Zertifikate muss `caFile` auf das Keycloak-Zertifikat zeigen.
+Die Konfigurationsvalidierung liest die Zertifikatsdatei noch nicht und
+stellt keine Netzwerkverbindung her; TLS-Vertrauen wird mit dem
+Schluesselabruf in der Token-Pruefung wirksam.
+
+Realm, Client, Client-Rollen `admin`/`student` und Benutzer werden aus dem
+vorhandenen Keycloak weiterverwendet. Fuer die Pruefung von Signaturen ist
+kein Client-Secret vorgesehen. Ein Token-Bezug fuer Tests wird gesondert
+angebunden; Zugangsdaten gehoeren nicht in TOML oder Logs.
+
 ## Anwendungsbasis
 
 ### Drizzle-Schema
