@@ -865,6 +865,11 @@ Pflichtfelder und Zod-Regeln wie POST, einschliesslich Adresse und vollstaendige
 Leistungsliste. IDs, Version und Zeitstempel im Body werden abgelehnt. Die
 Validierungstests pruefen beide Schemata; die Service-Anbindung steht noch aus.
 
+`IfMatchSchema` bereitet die Versionsvalidierung vor: ein einzelner starker ETag
+wie `"0"` wird in eine ganze Zahl von 0 bis 2147483647 umgewandelt. Fuehrende
+Nullen, schwache ETags, Listen und `*` werden nicht unterstuetzt. Die Pruefung
+gegen die gespeicherte Version und die HTTP-Fehlerzuordnung folgen separat.
+
 ## Team
 
 - [@Freud170](https://github.com/Freud170)
