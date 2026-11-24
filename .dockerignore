@@ -1,0 +1,20 @@
+# Nur fuer Installation und Laufzeit benoetigte Dateien in den Build-Kontext.
+**
+!Dockerfile
+!package.json
+!pnpm-lock.yaml
+!pnpm-workspace.yaml
+!src/
+!src/**
+!extras/
+!extras/compose/
+!extras/compose/student/
+!extras/compose/student/config.toml
+
+# Lokale Konfiguration, Tests und TLS-Dateien gehoeren nicht ins Image.
+src/**/*.test.mts
+src/config/config.toml
+src/config/tls/
+**/*.pem
+**/*.key
+**/.env*
