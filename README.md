@@ -870,6 +870,11 @@ wie `"0"` wird in eine ganze Zahl von 0 bis 2147483647 umgewandelt. Fuehrende
 Nullen, schwache ETags, Listen und `*` werden nicht unterstuetzt. Die Pruefung
 gegen die gespeicherte Version und die HTTP-Fehlerzuordnung folgen separat.
 
+Die vorbereiteten Fehlerklassen `VersionInvalidError` und `VersionOutdatedError`
+unterscheiden ungueltige Versionsangaben von Versionskonflikten. Ihre Meldungen
+enthalten keine uebernommenen Headerwerte. Verwendung im Update-Service und
+Zuordnung zu HTTP-Antworten stehen noch aus.
+
 ## Team
 
 - [@Freud170](https://github.com/Freud170)
