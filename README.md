@@ -46,8 +46,8 @@ muss Port 3000 frei sein, insbesondere darf dort nicht bereits die Anwendung aus
 der ersten Abgabe laufen. Beim Start werden die DB-Passwortdatei und das
 oeffentliche DB-Zertifikat aus `[db]` gelesen und der Verbindungspool erzeugt.
 Verbindungen entstehen erst bei einer DB-Abfrage, beispielsweise durch Readiness.
-Greeting und Liveness benoetigen keine DB-Verbindung. Keycloak wird noch nicht
-benoetigt; der Start laedt keine Daten oder Benutzer nach.
+Greeting und Liveness benoetigen keine DB-Verbindung. Geschuetzte Anfragen
+benoetigen Keycloak; der Start laedt keine Daten oder Benutzer nach.
 
 Der Server läuft nur mit HTTPS (HTTP/2 und TLS 1.3, zusätzlich HTTP/1.1 für Bruno).
 Zertifikat und privater Schlüssel liegen in `src/config/tls/`. Das Zertifikat ist
@@ -373,8 +373,12 @@ CORS, Security-Header, Antwortzeitmessung und das Logging ohne Token-Inhalte.
 
 Die Rollen-Middleware wird mit dem gemeinsamen Verifier ueber den DI-Container
 bereitgestellt. Unit-Tests pruefen die Zugriffsmatrix und stellen sicher, dass
-abgelehnte Anfragen keine schreibenden Services erreichen. Die Umstellung von
-Bruno und dem globalen Integrationstest-Setup auf Tokens steht noch aus.
+abgelehnte Anfragen keine schreibenden Services erreichen. Integrationstests
+verwenden echte Anmeldungen der vorhandenen Testbenutzer. Passwoerter stehen
+nur in der ignorierten lokalen `.env`, Tokens nur im Arbeitsspeicher.
+Nach den Tests werden die RC1-Fixtures wiederhergestellt und beide Anmeldungen
+bei Keycloak beendet. 243 Unit-Tests und 34 Integrationstests wurden erfolgreich
+geprueft. Die Token-Anbindung der Bruno-Collection steht noch aus.
 
 ## Anwendungsbasis
 
@@ -630,18 +634,40 @@ Vitest hat zwei Projekte (`vitest.config.mts`): **unit** (`src/**/*.test.mts`, o
 laufende App oder Datenbank) und **integration** (`test/integration/**`, HTTP-Requests
 mit `fetch` gegen die laufende App und PostgreSQL):
 
-Das Integrationstest-Setup und die POST-Tests senden derzeit noch keine Tokens.
-`pnpm run test:integration` scheitert deshalb aktuell bereits beim DB-Neuladen
-mit 401. Die Token-Anbindung dieser Tests folgt im naechsten Security-Paket;
-die Unit-Tests laufen unabhaengig von App, Datenbank und Keycloak.
+Fuer Integrationstests die vorhandenen Testzugangsdaten lokal eintragen:
 
-Vor den Integrationstests laedt `test/integration/setup.global.mts` die DB per
+```powershell
+Copy-Item test/integration/.env.example test/integration/.env  # nur falls noch nicht vorhanden
+```
+
+`CLIENT_SECRET` gehoert zum vorhandenen `student-client`. Die beiden
+`TEST_*_PASSWORD`-Werte sind die bestehenden Passwoerter der Benutzer mit
+Client-Rolle `admin` beziehungsweise `student`; die Vorlage nennt `admin` und
+`erika`. Die `.env` ist ignoriert. Keine neuen Benutzer oder Realm-Importe anlegen.
+Die Unit-Tests benoetigen weder diese Datei noch externe Dienste.
+
+Nach Pruefung der Volumes, Ports und Testdaten gemaess den Betriebsanleitungen:
+
+```powershell
+docker compose -f extras/compose/backend/compose.yml up -d --wait
+pnpm run start  # eigenes Terminal; keine Container-App gleichzeitig auf Port 3000
+# In einem zweiten Terminal, ebenfalls im Projektverzeichnis:
+pnpm run test:integration
+```
+
+Vor und nach den Integrationstests laedt `test/integration/setup.global.mts` die DB per
 `QUERY /dev/db_populate` neu (Tabellen neu anlegen, CSV-Testdaten importieren); jeder
-Lauf beginnt also mit denselben Daten. Der Dev-Endpunkt existiert nur mit
+Lauf beginnt und endet also mit denselben Daten. Nur in der vorgesehenen
+RC1-Testdatenbank ausfuehren: vorhandene Studierendendaten werden ersetzt.
+Der Dev-Endpunkt existiert nur mit
 `populate = true` in `[db]` von `config.toml` und nutzt fuer `COPY` den Superuser
 `postgres` ueber eine kurzlebige eigene Verbindung (`src/config/dev/db-populate.mts`).
-Er ist auf die Client-Rolle `admin` beschraenkt. Fuer das selbstsignierte
-Zertifikat setzt `vitest.config.mts` bisher `NODE_TLS_REJECT_UNAUTHORIZED=0` im Testprozess.
+Er ist auf die Client-Rolle `admin` beschraenkt. Das globale Setup meldet sich
+direkt am OIDC-Token-Endpunkt an, uebergibt die Access-Tokens ueber den
+Vitest-Testkontext und meldet die Sitzungen im Teardown ab. Auch bei Fehlern
+nach einer erfolgreichen Anmeldung wird deren Logout versucht.
+`tls.mts` ergaenzt in Setup und Test-Workern ausschliesslich die konfigurierten
+App-/Keycloak-Zertifikate als Vertrauensanker; die Zertifikatspruefung bleibt aktiv.
 Die Testdateien laufen parallel; Tests, die Daten anlegen, verwenden deshalb Werte,
 die keine Suche der anderen Tests treffen.
 
@@ -659,7 +685,8 @@ LEFT JOINs ohne LIMIT, alle Suchfilter und die Weitergabe von DB-Fehlern.
 Service-Tests pruefen Validierung vor dem DB-Zugriff; Health-Tests pruefen
 DB-Ausfall und Erholung sowie die unabhaengige Liveness.
 Integrationstests decken Health, Suche mit ID (inkl. ETag), Suche mit Suchparametern
-und POST ab; ihre Token-Anbindung sowie Lasttests folgen.
+und POST ab, einschliesslich POST mit beiden Client-Rollen, 401 bei fehlendem
+oder ungueltigem Token und 403 fuer DB-Neuladen mit `student`. Lasttests folgen.
 
 Die Regeln für Oxlint stehen in `oxlint.config.mts`; alle Kategorien sind als
 Fehler eingestellt, inklusive Typprüfung.
@@ -784,9 +811,10 @@ gemeinsam (#28). Keycloak verwendet weiterhin seine bisherige Beta4-Datenbank;
 die Studierendenanwendung verwendet die getrennte RC1-Instanz.
 Keycloak-Konfiguration und Token-Verifier mit `jose` sind umgesetzt und mit
 echten Tokens geprueft. Rollen-Middleware und Endpunktschutz fuer POST und
-DB-Neuladen sind implementiert und durch Unit-Tests abgedeckt. Die Umstellung
-von Bruno/Integrationstests und die abschliessende durchgaengige Pruefung
-bleiben fuer #30/#31 offen.
+DB-Neuladen sind implementiert. Die Integrationstests verwenden echte
+Admin-/Student-Anmeldungen mit explizitem TLS-Vertrauen. Die Token-Anbindung
+der Bruno-Collection und die abschliessende Dokumentation bleiben fuer
+#29/#30/#31 offen.
 
 ## Team
 

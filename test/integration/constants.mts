@@ -2,7 +2,7 @@
 
 import { getConfig } from '../../src/config/config.mts';
 
-const config = await getConfig();
+export const config = await getConfig();
 
 export const baseURL = `https://localhost:${config.server.port}`;
 export const restURL = `${baseURL}/rest`;

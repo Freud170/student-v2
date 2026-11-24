@@ -1,13 +1,8 @@
 import { defineConfig } from 'vitest/config';
-import process from 'node:process';
-
-// Integrationstests: fetch akzeptiert sonst das selbstsignierte Zertifikat des Servers
-// nicht (wie im Beispiel der Vorlesung; gilt nur fuer den Testprozess).
-process.env['NODE_TLS_REJECT_UNAUTHORIZED'] = '0';
 
 const INTEGRATION_TIMEOUT = 5000;
 
-// Zwei Projekte wie im Beispiel der Vorlesung:
+// Getrennte Projekte fuer isolierte Tests und die vorgesehene Testumgebung:
 //  unit:        ohne laufende App, Datenbank oder Keycloak (pnpm run test:run)
 //  integration: HTTP-Requests mit fetch gegen die laufende App und PostgreSQL
 //               (pnpm run test:integration)
@@ -30,8 +25,9 @@ export default defineConfig({
                 test: {
                     name: 'integration',
                     include: ['test/integration/**/*.test.mts'],
-                    // Laedt die DB vor allen Tests einmal neu
+                    // Laedt die DB vor und nach allen Tests neu; meldet Testbenutzer ab.
                     globalSetup: './test/integration/setup.global.mts',
+                    setupFiles: ['./test/integration/setup.mts'],
                     testTimeout: INTEGRATION_TIMEOUT,
                 },
             },
