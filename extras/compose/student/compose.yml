@@ -1,0 +1,63 @@
+# Gemeinsamer Betrieb von Anwendung und PostgreSQL.
+name: postgres
+
+include:
+  - path: ../backend/compose.yml
+
+services:
+  student:
+    image: student-v2:2026.11.0-hardened
+    # Das lokal gebaute Image verwenden; kein Registry-Pull beim Start.
+    pull_policy: never
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - host_ip: 127.0.0.1
+        published: 3000
+        target: 3000
+    volumes:
+      - type: bind
+        source: ./config.toml
+        target: /opt/app/src/config/config.toml
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ../../../src/config/tls/key.pem
+        target: /run/secrets/student-key.pem
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ../../../src/config/tls/certificate.crt
+        target: /run/config/student-certificate.crt
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ../postgres/password.txt
+        target: /run/secrets/student-db-password
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ../postgres/init/tls/server.crt
+        target: /run/config/postgres-ca.crt
+        read_only: true
+        bind:
+          create_host_path: false
+    networks: [acme-network]
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    stop_grace_period: 15s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 2G
+        reservations:
+          cpus: "1.0"
+          memory: 1G

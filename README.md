@@ -128,7 +128,8 @@ DB-Superuser-Passwort wird fuer diesen Betrieb nicht benoetigt.
 Das Image enthaelt diese Container-Konfiguration bereits unter
 `/opt/app/src/config/config.toml`. Eine angepasste Datei kann dort read-only
 eingebunden werden. Die lokale Startkonfiguration bleibt unveraendert.
-Die Compose-Einbindung folgt mit #28.
+Die Compose-Einbindung fuer Anwendung und PostgreSQL steht unter
+[Docker Compose](#docker-compose).
 
 ## Docker-Image
 
@@ -184,6 +185,79 @@ Zertifikatspruefung und TLS 1.3 ueber HTTP/1.1 und HTTP/2, Liveness, Readiness
 sowie lesende REST-Aufrufe. SIGTERM beendet die Anwendung mit Exitcode 0.
 Die Pruefsummen aller drei Datenbanktabellen blieben unveraendert. Der
 Testcontainer wurde anschliessend entfernt; PostgreSQL blieb in Betrieb.
+
+## Docker Compose
+
+`extras/compose/student/compose.yml` startet die Anwendung zusammen mit
+PostgreSQL. Der App-Einstieg bindet `../backend/compose.yml` ein; dieser
+verwendet die vorhandene PostgreSQL-Konfiguration. Alle Einstiegspunkte nutzen
+das bestehende Compose-Projekt `postgres` und das Netzwerk `acme-network`.
+So wird eine bereits aus `extras/compose/postgres` gestartete Datenbank
+wiederverwendet. Keine abweichenden Projektnamen mit `-p` oder
+`COMPOSE_PROJECT_NAME` verwenden.
+
+Voraussetzungen sind das lokal gebaute Image `student-v2:2026.11.0-hardened`,
+die eingerichteten `*_student_v2`-Volumes und die oben genannten TLS- und
+Passwortdateien. Vor dem Start Container und Volume-Zuordnung nach der
+[PostgreSQL-Anleitung](extras/compose/postgres/ReadMe.md) pruefen. Insbesondere
+darf `postgres` auf Port 5432 nicht zur ersten Abgabe gehoeren; Port 3000 muss
+frei sein. Das eingebundene DB-Zertifikat muss zum aktiven Server passen.
+
+Aus dem Projektverzeichnis:
+
+```powershell
+docker compose -f extras/compose/student/compose.yml config --quiet
+docker compose -f extras/compose/student/compose.yml up -d --wait
+docker compose -f extras/compose/student/compose.yml ps
+docker compose -f extras/compose/student/compose.yml logs student
+```
+
+Die Anwendung wartet auf den PostgreSQL-Healthcheck. `--wait` wartet auch auf
+den Readiness-Healthcheck des App-Images. HTTPS ist unter
+`https://localhost:3000` erreichbar; der App-Port wird nur an `127.0.0.1`
+veroeffentlicht. Das lokale Image wird nicht automatisch gebaut oder aus einer
+Registry geladen. Nach Codeaenderungen zuerst das Image erneut bauen.
+
+Compose bindet Container-TOML, HTTPS-Schluessel, beide Zertifikate und das
+DB-Passwort read-only ein. Fehlende Bind-Dateien werden nicht als Verzeichnisse
+angelegt. Die Anwendung laeuft als Image-Benutzer `1000:1000` mit
+schreibgeschuetztem Dateisystem, ohne Linux-Capabilities und mit
+`no-new-privileges`. Logs gehen als JSON an die Konsole; Testdaten werden nicht
+neu geladen. Fuer SIGTERM und das geordnete Schliessen bleiben 15 Sekunden.
+
+Nur die Anwendung stoppen und ihren Container entfernen, PostgreSQL weiterlaufen
+lassen:
+
+```powershell
+docker compose -f extras/compose/student/compose.yml stop student
+docker compose -f extras/compose/student/compose.yml rm -f student
+```
+
+Den gesamten Stack stoppen und Container sowie Netzwerk entfernen:
+
+```powershell
+docker compose -f extras/compose/student/compose.yml down
+```
+
+Die externen PostgreSQL-Volumes bleiben erhalten. Solange die App laeuft, den
+gemeinsamen App-Einstieg fuer den Stack verwenden; `down` im PostgreSQL- oder
+Backend-Verzeichnis wuerde die von der App benoetigte Datenbank stoppen.
+
+Keycloak ist noch nicht eingebunden; #28 ist damit teilweise umgesetzt. Fuer
+den gemeinsamen Betrieb muss die vorhandene Keycloak-Datenbank aus der ersten
+Abgabe erreichbar bleiben. Die neue PostgreSQL-Instanz besitzt getrennte
+Datenvolumes. Die vorhandene Keycloak-Compose-Datei bindet dagegen die alte
+PostgreSQL-Instanz ein; beide verwenden denselben Containernamen und Port.
+Die Betriebsaufteilung wird vor der Keycloak-Einbindung festgelegt.
+Authentifizierung und Rollenpruefung folgen mit #30/#31.
+
+Der Compose-Start wurde mit der vorhandenen PostgreSQL-Instanz geprueft:
+beide Dienste gesund, TLS 1.3 mit Zertifikatspruefung ueber HTTP/1.1 und HTTP/2,
+Liveness, Readiness, vollstaendige REST-Aggregate sowie ETag/304 und 404.
+Die App beendet sich auf SIGTERM mit Exitcode 0. PostgreSQL wurde dabei weder
+neu erstellt noch neu gestartet; Tabellen-Pruefsummen und Sequenzstaende
+blieben unveraendert. Die regulaeren Integrationstests laden Testdaten neu
+und gehoeren nicht zu dieser lesenden Compose-Pruefung.
 
 ## Anwendungsbasis
 
@@ -587,7 +661,9 @@ Fehlerbehandlung mit Problem Details (#22) und Neuanlegen per POST mit Zod (#23)
 Eine Bruno-Collection prueft diese Endpunkte (#24). Unit-Tests und Integrationstests
 mit `fetch` gegen App und PostgreSQL laufen mit Vitest; die DB wird vorher ueber den
 Dev-Endpunkt neu geladen (#25). GitHub Actions prueft jeden Push mit Oxfmt, Oxlint,
-`tsc` und den Unit-Tests (#26).
+`tsc` und den Unit-Tests (#26). Das Hardened-App-Image ist umgesetzt (#27);
+Docker Compose startet Anwendung und PostgreSQL gemeinsam. Die Einbindung des
+bestehenden Keycloak ist fuer #28 noch offen.
 
 ## Team
 

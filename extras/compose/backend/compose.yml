@@ -1,0 +1,5 @@
+# Bestehende Projektzuordnung der PostgreSQL-Instanz beibehalten.
+name: postgres
+
+include:
+  - path: ../postgres/compose.yml
