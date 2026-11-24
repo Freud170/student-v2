@@ -1,0 +1,30 @@
+# Konfiguration fuer den App-Container; Dateien werden read-only eingebunden.
+
+[server]
+port = 3000
+keyFile = "/run/secrets/student-key.pem"
+certFile = "/run/config/student-certificate.crt"
+allowHTTP1 = true
+
+[log]
+level = "info"
+output = "console"
+pretty = false
+
+[cors]
+origins = ["https://localhost:4200", "https://localhost:5173"]
+
+[db]
+# PostgreSQL muss im Container-Netzwerk unter diesem Namen erreichbar sein.
+host = "postgres"
+port = 5432
+database = "student"
+user = "student"
+passwordFile = "/run/secrets/student-db-password"
+caFile = "/run/config/postgres-ca.crt"
+poolMax = 5
+poolIdleTimeoutMillis = 30000
+poolConnectionTimeoutMillis = 5000
+queryTimeoutMillis = 5000
+# Kein Dev-Endpunkt zum Neuladen; kein Superuser-Passwort erforderlich.
+populate = false

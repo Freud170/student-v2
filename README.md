@@ -97,6 +97,39 @@ laesst den vorherigen Bestand einschliesslich Sequenzen unveraendert.
 Der Aufruf erfolgt manuell in der getrennten Testdatenbank; die Anleitung steht
 unter [Testdaten neu laden](extras/compose/postgres/ReadMe.md#testdaten-wiederholbar-neu-laden).
 
+## Container-Konfiguration
+
+`extras/compose/student/config.toml` bereitet den Betrieb der Anwendung im
+Container vor. Die Datei wird dort read-only als `config.toml` neben dem
+Konfigurationsmodul eingebunden. Sie verwendet dasselbe Zod-Schema wie die
+lokale Konfiguration in `src/config/config.toml`.
+
+PostgreSQL wird im gemeinsamen Container-Netzwerk unter `postgres:5432`
+angesprochen. Datenbank und Benutzer bleiben `student`. Die TLS-Verbindung
+prueft weiterhin CA und Hostnamen und verwendet TLS 1.3. Das eingebundene
+DB-Zertifikat muss zum tatsaechlich laufenden PostgreSQL-Server passen.
+
+Folgende Dateien muessen zur Laufzeit read-only eingebunden und fuer den
+App-Benutzer lesbar sein:
+
+| Datei | Pfad im App-Container |
+|---|---|
+| Privater HTTPS-Schluessel der Anwendung | `/run/secrets/student-key.pem` |
+| HTTPS-Zertifikat der Anwendung | `/run/config/student-certificate.crt` |
+| Passwort des DB-Benutzers `student` | `/run/secrets/student-db-password` |
+| Vertrauenswuerdiges oeffentliches PostgreSQL-Zertifikat | `/run/config/postgres-ca.crt` |
+
+Die TOML-Datei enthaelt nur Pfade, keine Zugangsdaten oder Schluessel.
+Logausgaben erfolgen als JSON auf der Konsole, ohne Logdateien oder
+Pretty-Formatierung. HTTPS lauscht auf Port 3000 und erlaubt auch HTTP/1.1.
+Mit `populate = false` ist `/dev/db_populate` nicht registriert; ein
+DB-Superuser-Passwort wird fuer diesen Betrieb nicht benoetigt.
+
+Das Dockerfile und der Laufzeittest im Container folgen im naechsten Paket
+von #27; die Compose-Einbindung folgt mit #28. Diese Konfiguration allein
+startet keine Dienste. Die bestehende lokale Startkonfiguration bleibt aktiv,
+solange die Container-Konfiguration nicht eingebunden wird.
+
 ## Anwendungsbasis
 
 ### Drizzle-Schema
