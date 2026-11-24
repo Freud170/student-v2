@@ -855,6 +855,11 @@ mit ersetztem pg-Treiber. Echte PostgreSQL-Pruefungen fuer konkurrierende
 Updates und Rollback stehen noch aus. Service, PUT-Route und HTTP-Fehlerzuordnung
 sind noch nicht angebunden; PUT ist noch nicht verfuegbar.
 
+Die Eindeutigkeitsabfrage `StudentRepository.existsBy` kann fuer Aenderungen
+die eigene Student-ID ausschliessen. Dadurch gelten eigene unveraenderte Werte
+nicht als Duplikate. Ohne diese optionale ID bleibt die Pruefung fuer POST
+unveraendert. Die Nutzung im Update-Service folgt im naechsten Service-Paket.
+
 ## Team
 
 - [@Freud170](https://github.com/Freud170)

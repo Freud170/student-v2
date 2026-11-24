@@ -1,4 +1,4 @@
-import { type SQL, and, asc, eq, sql } from 'drizzle-orm';
+import { type SQL, and, asc, eq, ne, sql } from 'drizzle-orm';
 import { adresseTable, pruefungsleistungTable, studentTable } from '../../db/schema.mts';
 import { type Database } from '../../config/db.mts';
 import { type Student } from '../entity/student.mts';
@@ -100,12 +100,17 @@ export class StudentRepository {
         });
     }
 
-    /** Gibt es bereits einen Studierenden mit diesem Wert, z.B. dieser Email? */
-    async existsBy(spalte: UniqueSpalte, wert: string): Promise<boolean> {
+    /** Gibt es diesen Wert bereits? Beim Aendern die eigene ID ausschliessen. */
+    async existsBy(spalte: UniqueSpalte, wert: string, eigeneId?: number): Promise<boolean> {
         const [row] = await this.#db
             .select({ id: studentTable.id })
             .from(studentTable)
-            .where(eq(studentTable[spalte], wert))
+            .where(
+                and(
+                    eq(studentTable[spalte], wert),
+                    eigeneId === undefined ? undefined : ne(studentTable.id, eigeneId),
+                ),
+            )
             .limit(1);
         return row !== undefined;
     }

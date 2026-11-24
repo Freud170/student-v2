@@ -88,6 +88,18 @@ describe('StudentRepository: create', () => {
 
 describe('StudentRepository: existsBy', () => {
     test.each(['email', 'matrikelnummer', 'username'] as const)(
+        '%s wird beim Aendern unter Ausschluss der eigenen ID geprueft',
+        async (spalte) => {
+            const { repository, query, texte } = setup([]);
+            await expect(repository.existsBy(spalte, 'wert', NEUE_ID)).resolves.toBe(false);
+            expect(texte()[0]).toContain(`"${spalte}" = $1`);
+            expect(texte()[0]).toContain(' and ');
+            expect(texte()[0]).toContain('"student"."student"."id" <> $2');
+            expect(query.mock.calls[0]?.[1]).toStrictEqual(['wert', NEUE_ID, 1]);
+        },
+    );
+
+    test.each(['email', 'matrikelnummer', 'username'] as const)(
         '%s wird als Parameter verglichen',
         async (spalte) => {
             const { repository, query } = setup([[1]]);
