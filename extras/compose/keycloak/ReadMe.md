@@ -92,13 +92,14 @@ bleibt verfuegbar; fuer OIDC und die Pruefungen wird HTTPS verwendet. Der
 App-Container erreicht Keycloak unter `https://keycloak:8443`. Die Anwendung
 konfiguriert `https://localhost:8843/realms/student` als erwarteten Token-Issuer
 und die interne URL separat fuer JWKS. Tokens daher ueber den lokalen
-HTTPS-Endpunkt beziehen. Details und der noch offene Stand der Token-Pruefung
+HTTPS-Endpunkt beziehen. Details zur Token-Pruefung und Zugriffsmatrix
 stehen in der [Keycloak-Konfiguration](../../../README.md#keycloak-konfiguration).
 
 Der bestehende Realm `student`, `student-client`, die Client-Rollen `admin`
 und `student` sowie die vorhandenen Benutzer werden weiterverwendet. Auch
-andere vorhandene Realms bleiben erhalten. Die App verwendet diese Rollen
-erst mit #31; dieses Paket aendert keine Rollen oder Client-Einstellungen.
+andere vorhandene Realms bleiben erhalten. Die App erlaubt POST fuer `admin`
+oder `student` und das DB-Neuladen ausschliesslich fuer `admin`. Die
+Rollen-Middleware aendert keine Rollen oder Client-Einstellungen in Keycloak.
 
 Den gesamten Stack stoppen und seine Container entfernen:
 

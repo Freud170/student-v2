@@ -1,8 +1,10 @@
 import { describe, expect, test, vi } from 'vitest';
 import { Hono } from 'hono';
 import { type StudentWriteService } from '../service/student-write-service.mts';
+import { type TokenVerifier } from '../../security/token-verifier.mts';
 import { UniqueError } from '../service/errors.mts';
 import { createErrorHandler } from '../../error-handler.mts';
+import { createRolesRequired } from '../../security/roles-required.mts';
 import { createStudentWriteRouter } from './student-write-router.mts';
 import { pino } from 'pino';
 
@@ -22,19 +24,25 @@ const studentNeu = {
 };
 
 // Router unter /rest mit derselben globalen Fehlerbehandlung wie in app.mts
-const setup = () => {
+const setup = (role = 'admin') => {
     const service = {
         create: vi.fn<StudentWriteService['create']>().mockResolvedValue(NEUE_ID),
     };
-    const app = new Hono().route('/rest', createStudentWriteRouter(service));
+    const verifier = {
+        verify: vi.fn<TokenVerifier['verify']>().mockResolvedValue({
+            resource_access: { 'student-client': { roles: [role] } },
+        }),
+    };
+    const rolesRequired = createRolesRequired(verifier, 'student-client');
+    const app = new Hono().route('/rest', createStudentWriteRouter(service, rolesRequired));
     app.onError(createErrorHandler(pino({ level: 'silent' })));
     const post = (body: string) =>
         app.request('https://localhost:3000/rest', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', Authorization: 'Bearer test-token' },
             body,
         });
-    return { service, post };
+    return { service, post, app, verifier };
 };
 
 describe('POST /rest', () => {
@@ -79,5 +87,31 @@ describe('POST /rest', () => {
         await expect(response.json()).resolves.toMatchObject({
             detail: expect.stringContaining('theo.test@h-ka.de'),
         });
+    });
+});
+
+describe('POST-Berechtigungen', () => {
+    test.each(['admin', 'student'])('%s darf einen Studierenden anlegen', async (role) => {
+        const { service, post, verifier } = setup(role);
+        const response = await post(JSON.stringify(studentNeu));
+        expect(response.status).toBe(CREATED);
+        expect(verifier.verify).toHaveBeenCalledExactlyOnceWith('test-token');
+        expect(service.create).toHaveBeenCalledExactlyOnceWith(studentNeu);
+    });
+
+    test('fehlendes Token wird vor dem Parsen des Bodys abgelehnt', async () => {
+        const { app, service, verifier } = setup();
+        const response = await app.request('/rest', { method: 'POST', body: '{ kaputt' });
+        expect(response.status).toBe(401);
+        expect(response.headers.get('WWW-Authenticate')).toBe('Bearer');
+        expect(service.create).not.toHaveBeenCalled();
+        expect(verifier.verify).not.toHaveBeenCalled();
+    });
+
+    test('fehlende Client-Rolle verhindert den Service-Aufruf', async () => {
+        const { service, post } = setup('reader');
+        const response = await post('{ kaputt');
+        expect(response.status).toBe(403);
+        expect(service.create).not.toHaveBeenCalled();
     });
 });

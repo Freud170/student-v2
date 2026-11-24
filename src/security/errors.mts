@@ -8,6 +8,14 @@ export class UnauthorizedError extends Error {
     }
 }
 
+/** Das verifizierte Token enthaelt keine passende Client-Rolle. */
+export class ForbiddenError extends Error {
+    constructor() {
+        super('Erforderliche Rolle fehlt.');
+        this.name = 'ForbiddenError';
+    }
+}
+
 /** Die Pruefung ist wegen fehlender Signaturschluessel nicht moeglich. */
 export class KeycloakUnavailableError extends Error {
     constructor() {

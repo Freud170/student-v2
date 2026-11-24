@@ -8,7 +8,6 @@ import { pino } from 'pino';
 import { relations } from './db/relations.mts';
 
 const origin = 'https://localhost:5173';
-const BAD_REQUEST = 400;
 
 // Gelesenes Aggregate fuer Tests ohne Datenbank
 const student: Student = {
@@ -152,9 +151,9 @@ describe('HTTP-Middleware', () => {
         });
 
         expect(lines.join('')).not.toContain('secret');
-        // "body-secret" ist kein JSON: POST /rest antwortet mit 400
+        // Das ungueltige Token wird vor dem Parsen des Bodys abgelehnt.
         expect(lines.map((line): unknown => JSON.parse(line))).toContainEqual(
-            expect.objectContaining({ method: 'POST', path: '/rest', status: BAD_REQUEST }),
+            expect.objectContaining({ method: 'POST', path: '/rest', status: 401 }),
         );
     });
 
