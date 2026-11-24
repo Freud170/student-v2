@@ -860,6 +860,11 @@ die eigene Student-ID ausschliessen. Dadurch gelten eigene unveraenderte Werte
 nicht als Duplikate. Ohne diese optionale ID bleibt die Pruefung fuer POST
 unveraendert. Die Nutzung im Update-Service folgt im naechsten Service-Paket.
 
+Das vorbereitete `StudentUpdateSchema` verwendet fuer PUT dieselben fachlichen
+Pflichtfelder und Zod-Regeln wie POST, einschliesslich Adresse und vollstaendiger
+Leistungsliste. IDs, Version und Zeitstempel im Body werden abgelehnt. Die
+Validierungstests pruefen beide Schemata; die Service-Anbindung steht noch aus.
+
 ## Team
 
 - [@Freud170](https://github.com/Freud170)

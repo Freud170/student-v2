@@ -1,4 +1,4 @@
-// Validierung neuer Studierender mit Zod (Request-Body bei POST).
+// Validierung der vollstaendigen fachlichen Daten bei POST und PUT.
 // "strictObject": unbekannte Felder im JSON werden abgelehnt.
 
 import { z } from 'zod';
@@ -40,3 +40,7 @@ export const StudentNeuSchema = z.strictObject({
 
 // Aus dem Schema abgeleiteter TypeScript-Typ
 export type StudentNeu = z.infer<typeof StudentNeuSchema>;
+
+// PUT ersetzt das gesamte Aggregate und hat dieselben Pflichtfelder wie POST.
+export const StudentUpdateSchema = StudentNeuSchema;
+export type StudentUpdate = z.infer<typeof StudentUpdateSchema>;
