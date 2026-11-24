@@ -357,6 +357,7 @@ beendet und die Testcontainer entfernt. Die RC1-Datenbank wurde nicht gestartet.
 | Endpunkt | Erforderliche Berechtigung |
 |---|---|
 | `POST /rest` | Client-Rolle `admin` oder `student` |
+| `PUT /rest/:id` | Client-Rolle `admin` oder `student` |
 | `QUERY /dev/db_populate` | Client-Rolle `admin`; nur mit `populate = true` |
 | GET/HEAD fuer `/`, `/rest`, `/rest/:id` und Health | Oeffentlich |
 | CORS-Preflight mit OPTIONS | Kein Token erforderlich |
@@ -535,6 +536,7 @@ werden explizit an die Router und Services uebergeben.
 | `GET /rest/:id` mit `If-None-Match` | Version unveraendert: 304 ohne Body |
 | `GET /rest?nachname=…` | 200 mit Liste der Treffer; ohne Parameter alle; keine Treffer oder ungueltige Parameter: 404 |
 | `POST /rest` | `admin` oder `student`; 201 mit `Location`-Header (ohne Body); ungueltige Daten oder vergebene Matrikelnummer/Email/Username: 422; kein JSON: 400 |
+| `PUT /rest/:id` | `admin` oder `student`; 204 mit neuem `ETag` (ohne Body); fehlendes `If-Match`: 428; ungueltige oder nicht aktuelle Version: 412; unbekannte/ungueltige ID: 404; ungueltige Daten oder Duplikate: 422; kein JSON: 400 |
 | `GET /health/liveness` | Status 200 mit `{"status":"up"}` |
 | `GET /health/readiness` | `SELECT 1` erfolgreich: 200 mit `{"status":"up"}`; DB-Fehler: 503 mit `{"status":"down"}` |
 | `HEAD /`, `HEAD /rest` | Dieselben Statuscodes und Header, ohne Response-Body |
@@ -550,7 +552,9 @@ z.B. `"0"`. `If-None-Match` wird exakt verglichen.
 Bekannte Einschränkung: Bei gzip-komprimierten Antworten macht `hono/compress` daraus
 ein schwaches `W/"0"`; sendet ein Client das zurück (z.B. ein Browser), gibt es 200
 statt 304. Für Tests mit Bruno und Vitest (`If-None-Match: "0"`) spielt das keine
-Rolle. Paging, PUT, DELETE und GraphQL folgen mit den jeweiligen Funktionen. `Student` bleibt das
+Rolle. Fuer PUT einen starken ETag aus einem GET mit `Accept-Encoding: identity`
+verwenden; ein schwacher ETag wird als `If-Match` mit 412 abgelehnt.
+Paging, DELETE und GraphQL folgen mit den jeweiligen Funktionen. `Student` bleibt das
 zentrale Aggregate mit Adresse (1:1) und Pruefungsleistungen (1:N).
 
 **Neuanlegen mit POST:** Der Request-Body wird mit Zod geprueft
@@ -577,13 +581,25 @@ Studierenden, Adresse und Leistungen ueber das Repository in einer Transaktion a
 `erzeugt` und `aktualisiert` setzt der Service. POST verlangt ein gueltiges
 Keycloak-Access-Token mit der Client-Rolle `admin` oder `student`.
 
+**Aendern mit PUT:** `PUT /rest/:id` erhaelt denselben vollstaendigen JSON-Body
+wie POST, ein Bearer-Token fuer `admin` oder `student` und `If-Match` mit dem
+zuletzt gelesenen starken ETag, z.B. `"0"`. Bei Erfolg kommt 204 ohne Body mit
+dem neuen ETag, z.B. `"1"`. Unbekannte IDs werden nicht neu angelegt.
+Authentifizierung und Rollenpruefung laufen zuerst, danach Content-Encoding, Pfad-ID,
+Vorhandensein von `If-Match` und JSON geprueft. Die fachliche Validierung und
+Versionspruefung uebernimmt der Service. CORS erlaubt PUT und `If-Match`;
+der ETag ist fuer Browser freigegeben. OPTIONS benoetigt kein Token.
+
 **Globale Fehlerbehandlung** (`src/error-handler.mts`):
 Der Service wirft eigene Fehlerklassen (`src/student/service/errors.mts`), Router
 fangen keine Fehler ab. `app.onError` bildet sie zentral ab: `NotFoundError` (unbekannte
 oder ungueltige ID, ungueltige Suchparameter, keine Treffer) → 404, `ZodError` und
-`UniqueError` → 422 als Problem Details nach RFC 9457 (`application/problem+json`),
-alle anderen Fehler → 500 ohne interne Details (diese nur im Log). Kein gueltiges
-JSON im POST-Body beantwortet der Router selbst mit 400. 412 und 428 folgen mit PUT.
+`UniqueError` → 422, `VersionInvalidError`/`VersionOutdatedError` → 412 und
+`VersionRequiredError` → 428, jeweils als Problem Details nach RFC 9457
+(`application/problem+json`). 428-Antworten setzen `Cache-Control: no-store`.
+Die Security-Fehler liefern wie oben beschrieben 401/403/503; alle anderen
+Fehler → 500 ohne interne Details (diese nur im Log). Ungueltiges JSON bei
+POST oder PUT beantwortet der Router selbst mit 400.
 
 Die Health-Endpunkte liegen in einem eigenen Router unter `src/admin/` und
 durchlaufen dieselbe globale Middleware wie die anderen Routen. Liveness zeigt,
@@ -597,20 +613,29 @@ anschliessende Wiederverwendbarkeit des Pools.
 
 Globale Middleware setzt Security-Header (u.a. HSTS und `nosniff`), CORS und
 Antwortkompression mit `hono/compress`. Die erlaubten Browser-Origins stehen in
-`[cors].origins` in `src/config/config.toml`; aktuell sind nur `GET` und `HEAD`
+`[cors].origins` in `src/config/config.toml`; `GET`, `HEAD`, `POST` und `PUT` sind
 freigegeben. Preflights erhalten Status 204. Nicht freigegebene Origins erhalten
 keinen `Access-Control-Allow-Origin`-Header; CORS ersetzt keine Authentifizierung.
 Die Hono-Optionen heissen `allowHeaders` und `exposeHeaders`.
 
 Antworten werden bei passendem `Accept-Encoding` mit gzip oder deflate komprimiert.
-`hono/compress` komprimiert keine eingehenden Request-Bodies. Die entsprechende
-Anforderung wird im offenen Issue #41 weitergefuehrt; fuer die spaeteren
-Schreibendpunkte muss die Behandlung komprimierter Requests festgelegt werden.
+POST und PUT akzeptieren nur unkomprimierte Request-Bodies: ohne
+`Content-Encoding` oder mit dem einzelnen Wert `identity` (Gross-/Kleinschreibung
+und umgebende Leerzeichen werden ignoriert). Andere Werte wie `gzip`, `br`,
+`deflate`, leere Header oder Kodierungslisten werden mit 415 als Problem Details
+und `Accept-Encoding: identity` abgelehnt (#41). Die gemeinsame Pruefung erfolgt
+nach der Rollenpruefung und vor Body-Lesen, JSON-Parsing und Schreibservice;
+bei PUT auch vor der If-Match-Pruefung. Es findet keine Dekompression statt.
+CORS erlaubt `Content-Encoding`, damit auch Browser die Antwort erhalten.
+Lokale Tests pruefen echte gzip-Bytes, ungelesene Bodies und ausbleibende
+Service-Aufrufe. Integrationstests senden echte gzip-Bytes an POST und PUT und
+pruefen 415 ohne Datenveraenderung sowie erfolgreiche Requests mit `identity`.
+Die Bruno-Collection prueft ebenfalls gzip-Ablehnung und erlaubte identity-Bodies.
 
 `X-Response-Time` misst die Bearbeitungszeit bis zur fertigen Response, ohne die
 anschliessende Netzwerkuebertragung. Fehler und Preflights werden ebenfalls
 protokolliert. Unerwartete Fehler liefern eine allgemeine JSON-Antwort mit Status
-500; die fachlichen Fehlerfaelle aus Issue #22 folgen mit den REST-Funktionen.
+500; fachliche Fehler werden wie im Abschnitt zur globalen Fehlerbehandlung abgebildet.
 
 ## Logging
 
@@ -687,14 +712,30 @@ Die Pino-Tests
 starten eigene Node-Prozesse, pruefen deren Ausgabe und entfernen ihre temporaeren
 Logverzeichnisse unter `temp`. Pool- und Server-Lebenszyklustests simulieren
 externe Ressourcen; sie oeffnen weder einen DB-Zugang noch einen HTTP-Port.
-Die Repository-Tests ersetzen nur den PostgreSQL-Treiber; SQL-Erzeugung und
+Die Repository-Unit-Tests ersetzen nur den PostgreSQL-Treiber; SQL-Erzeugung und
 Ergebnisabbildung laufen mit Drizzle. Sie pruefen Aggregate, Parametrisierung,
 LEFT JOINs ohne LIMIT, alle Suchfilter und die Weitergabe von DB-Fehlern.
 Service-Tests pruefen Validierung vor dem DB-Zugriff; Health-Tests pruefen
 DB-Ausfall und Erholung sowie die unabhaengige Liveness.
-Integrationstests decken Health, Suche mit ID (inkl. ETag), Suche mit Suchparametern
-und POST ab, einschliesslich POST mit beiden Client-Rollen, 401 bei fehlendem
-oder ungueltigem Token und 403 fuer DB-Neuladen mit `student`. Lasttests folgen.
+Integrationstests decken Health, Suche mit ID (inkl. ETag), Suche mit Suchparametern,
+POST und PUT ab. Schreibzugriffe werden mit beiden Client-Rollen geprueft,
+einschliesslich 401 bei fehlendem oder ungueltigem Token und 403 fuer DB-Neuladen
+mit `student`. PUT-Tests pruefen das Ersetzen von Adresse und Leistungen (auch
+eine leere Liste), starke ETags, 400/404/412/422/428 sowie unveraenderte Daten nach
+abgelehnten Requests. Zwei parallele PUTs mit derselben Version duerfen genau
+einmal schreiben. Encoding-Tests senden echte gzip-Bytes und erwarten 415;
+`identity` bleibt erlaubt.
+
+`test/integration/repository/update.test.mts` verwendet zusaetzlich einen eigenen
+TLS-DB-Pool gegen dieselbe RC1-Testdatenbank. Zwei parallele Repository-Updates
+pruefen den atomaren Versionsvergleich ohne Service-Vorpruefung. Eine absichtlich
+ungueltige Note verletzt den DB-Constraint nach dem Root-/Adress-Update und dem
+Loeschen der alten Leistungen: Danach muss das gesamte Aggregate einschliesslich
+IDs, Version und Zeitstempeln unveraendert sein. Ein anschliessendes gueltiges
+Update prueft die weitere Verwendbarkeit des Pools und die Persistenzregeln.
+Die neuen Tests legen eigene Aggregate mit Matrikelnummern in den Bereichen
+66xxxx, 67xxxx und 68xxxx an; die gemeinsam gelesenen CSV-Fixtures bleiben bis
+zum globalen Teardown unangetastet. Lasttests folgen.
 
 Die Regeln für Oxlint stehen in `oxlint.config.mts`; alle Kategorien sind als
 Fehler eingestellt, inklusive Typprüfung.
@@ -722,7 +763,8 @@ Das Ergebnis steht danach unter <http://localhost:9000>. Beenden mit `docker com
 
 Die Collection `extras/bruno/student` (Format „OpenCollection“)
 enthaelt Requests mit Assertions fuer Health, Suche mit ID (inkl. ETag und
-406), Suche mit Suchparametern und Neuanlegen (inkl. 400 und 422).
+406), Suche mit Suchparametern, Neuanlegen (inkl. 400 und 422), PUT mit
+Versionsschutz und die Ablehnung komprimierter Request-Bodies.
 Lese- und Health-Requests bleiben ohne Token nutzbar. Die komplette Collection
 benoetigt dieselbe lokale Testumgebung wie die Integrationstests: Backend mit
 RC1 und Keycloak, lokale App mit `populate = true`. Der App-Container hat keinen
@@ -735,7 +777,7 @@ In der App die Collection ueber *Open Collection* oeffnen und das vorhandene
 Die Reihenfolge fuer einen vollstaendigen Lauf ist:
 **Keycloak → Dev → Health → REST → Security → Abschluss**.
 Die beiden Token-Anfragen setzen nur Laufzeitvariablen mit `bru.setVar`.
-POST erbt das Admin-Token; die Security-Anfragen pruefen zusaetzlich `student`
+Die POST-Anfragen unter `Neu anlegen` erben das Admin-Token; die Security-Anfragen pruefen zusaetzlich `student`
 sowie fehlende und ungueltige Tokens. Abschluss stellt die CSV-Fixtures wieder
 her, meldet beide Sitzungen ab und leert die Token-Variablen. Bei manuellen
 Einzelanfragen ebenfalls abschliessend diesen Ordner ausfuehren. Nach einem
@@ -750,8 +792,22 @@ Pop-Location
 ```
 
 Keine ausfuehrlichen Reports mit Token-Antworten oder Login-Formularen speichern.
-Der Test „kein JSON“ sendet absichtlich rohe Bytes, damit der HTTP-Client daraus
-keinen gueltigen JSON-String erzeugt. PUT, DELETE und GraphQL folgen mit den Funktionen.
+Die Tests „kein JSON“ senden absichtlich rohe Bytes, damit der HTTP-Client daraus
+keinen gueltigen JSON-String erzeugt.
+
+`REST/Aendern` ist eine zusammenhaengende Folge von 18 Requests: eigener
+Teststudent mit Matrikelnummer 777779, GET mit `Accept-Encoding: identity` fuer
+einen starken ETag, PUT mit diesem ETag und anschliessende Kontrolle. URL und
+ETag kommen aus den Antworten und liegen ausschliesslich in Laufzeitvariablen.
+Admin aendert Adresse und Leistungen, `student` leert spaeter die Leistungsliste.
+Die Folge prueft 400/401/404/412/422/428 und gzip-Ablehnung mit 415 bei POST/PUT.
+Ein GET nach den Fehlerfaellen vergleicht das vollstaendige Aggregate einschliesslich
+Version und Zeitstempeln mit dem zuletzt gespeicherten Stand. Die gzip-Faelle
+senden vorbereitete komprimierte Bytes des gueltigen PUT-Bodies als Buffer.
+POST und PUT mit `Content-Encoding: identity` bleiben erfolgreich. Abschluss
+leert nach dem DB-Reset auch die PUT-Laufzeitvariablen. Fuer Einzelpruefungen
+zuerst Anmeldung, Testdatenreset und die vorbereitenden Requests ausfuehren.
+DELETE und GraphQL folgen mit den jeweiligen Funktionen.
 
 ## Abhängigkeiten und Sicherheitslücken
 
@@ -839,6 +895,45 @@ DB-Neuladen sind implementiert. Echte Admin-/Student-Anmeldungen werden in
 Integrationstests und Bruno verwendet; TLS-Vertrauen ist explizit konfiguriert.
 Die vorhandene Keycloak-Einrichtung ist damit fuer die Anwendung angebunden
 (#29); Token-Pruefung und Rollenfreigaben sind durchgaengig geprueft (#30/#31).
+
+PUT mit Versionsschutz (#32) verwendet die Repository-Methode `update`.
+Sie prueft ID und erwartete Version direkt im SQL-UPDATE, erhoeht die Version
+und setzt `aktualisiert` in derselben Transaktion wie Adresse und Leistungen.
+`erzeugt` bleibt erhalten. Die Adresse wird ueber den eindeutigen
+Student-Fremdschluessel aktualisiert oder bei Fehlen angelegt; eine vorhandene
+Adress-ID bleibt erhalten. Die Leistungsliste wird vollstaendig ersetzt,
+ihre technischen IDs werden neu vergeben. Eine leere Liste entfernt alle
+bisherigen Leistungen dieses Studenten.
+Ohne passendes ID-/Versionspaar liefert die Methode `undefined` und laesst
+die Kinddaten unveraendert. DB-Fehler brechen die gesamte Transaktion ab.
+Lokale Tests pruefen das von Drizzle erzeugte SQL und die Transaktionssteuerung
+mit ersetztem pg-Treiber. Echte PostgreSQL-Integrationstests pruefen konkurrierende
+Updates und Rollback. PUT-Route, Rollenfreigabe, CORS und
+HTTP-Fehlerzuordnung sind umgesetzt und lokal mit ersetztem Repository und
+Token-Verifier geprueft; HTTP-Integrationstests verwenden echte Keycloak-Tokens
+und die RC1-Testdatenbank. Bruno prueft dieselben Schreib-Endpunkte mit echten
+Tokens, uebernommenen ETags, Fehlerfaellen und abschliessendem Datenreset.
+
+`StudentWriteService.update` validiert ID, Versionsangabe und vollstaendigen
+Body vor dem Datenbankzugriff. Lese- und Schreibservice verwenden dasselbe
+`StudentIdSchema` fuer ganze Zahlen von 1 bis 2147483647. Das `StudentUpdateSchema`
+verwendet dieselben fachlichen Pflichtfelder wie POST, einschliesslich Adresse
+und Leistungsliste; IDs, Version und Zeitstempel im Body werden abgelehnt.
+Noten werden fuer Drizzle in dezimale Strings umgewandelt.
+
+`IfMatchSchema` akzeptiert einen einzelnen starken ETag wie `"0"` mit einer
+Versionsnummer von 0 bis 2147483647. Fuehrende Nullen, schwache ETags, Listen
+und `*` werden nicht unterstuetzt. `VersionInvalidError` kennzeichnet ungueltige
+Versionsangaben, `VersionOutdatedError` eine Abweichung vom gespeicherten Stand.
+Beide Meldungen enthalten keine uebernommenen Headerwerte. Unbekannte oder
+inzwischen geloeschte Studierende ergeben `NotFoundError`.
+
+Matrikelnummer, E-Mail und Username werden ueber `StudentRepository.existsBy`
+unter Ausschluss der eigenen ID geprueft; eigene unveraenderte Werte sind
+dadurch erlaubt. Diese Vorpruefung ersetzt keine Datenbank-Constraints.
+Der atomare Versionsvergleich im Repository entscheidet ueber das Schreiben;
+bei einem Konflikt erfolgt keine automatische Wiederholung. Service-Tests
+pruefen diese Faelle mit ersetztem Repository, ohne externe Dienste.
 
 ## Team
 

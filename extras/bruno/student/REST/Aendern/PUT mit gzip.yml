@@ -1,0 +1,64 @@
+info:
+  name: PUT mit gzip
+  type: http
+  seq: 14
+
+http:
+  method: PUT
+  url: "{{putUrl}}"
+  headers:
+    - name: Content-Type
+      value: "application/json"
+    - name: If-Match
+      value: "{{putEtag}}"
+    - name: Content-Encoding
+      value: "gzip"
+  auth:
+    type: bearer
+    token: "{{adminToken}}"
+  body:
+    type: json
+    data: |-
+      {
+          "matrikelnummer": "777779",
+          "nachname": "Neu",
+          "vorname": "Tina",
+          "email": "put.bruno@h-ka.de",
+          "username": "put-bruno",
+          "adresse": {
+              "plz": "53113",
+              "ort": "Bonn"
+          },
+          "pruefungsleistungen": [
+              {
+                  "modul": "Netze",
+                  "note": 1,
+                  "semester": "WS 2026/27"
+              }
+          ]
+      }
+
+runtime:
+  scripts:
+    - type: before-request
+      code: |-
+        // gzip-Bytes des vollstaendigen Bodies aus "Als admin aendern"; keine JSON-Serialisierung.
+        req.setBody(Buffer.from('H4sIAAAAAAAACjWPQQrCMBREryKzTtW2qJiVeAA3Ci7ERbRfLU1+QpLvoqV3F4vObpgHMzPAmRzbjiyLcxShsflqCwU29xcbR9A4kEDh7ePPn1o2UCBnWguNIHl+i8J+9yo6M28ICpLoTwfJxRRDwTSRUiLoAcH20FjVZVlDwccMjb1nxqgQotBD+JkstSkLP4mhLwOcb8ROg3L/bWGfCbpUSOQo5enA+TirltV6UW0wXscP78V/HOIAAAA=', 'base64'));
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "415"
+    - expression: res.headers['content-type']
+      operator: eq
+      value: "application/problem+json"
+    - expression: res.body.statusCode
+      operator: eq
+      value: "415"
+    - expression: res.headers['accept-encoding']
+      operator: eq
+      value: "identity"
+
+settings:
+  encodeUrl: true
+  timeout: 5000
+  followRedirects: false

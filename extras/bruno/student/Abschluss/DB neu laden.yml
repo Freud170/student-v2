@@ -11,6 +11,14 @@ http:
     token: "{{adminToken}}"
 
 runtime:
+  scripts:
+    - type: after-response
+      code: |-
+        if (res.getStatus() === 200) {
+            bru.setVar('putUrl', '');
+            bru.setVar('putEtag', '');
+            bru.setVar('putSnapshot', '');
+        }
   assertions:
     - expression: res.status
       operator: eq

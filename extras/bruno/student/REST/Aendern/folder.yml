@@ -1,0 +1,16 @@
+info:
+  name: Aendern
+  type: folder
+  seq: 4
+
+request:
+  auth: inherit
+
+docs:
+  content: >-
+    In Reihenfolge ausfuehren, nach Keycloak-Anmeldung und Dev-Testdatenreset.
+    Eigener Teststudent 777779; URL und starke ETags werden zur Laufzeit aus den
+    Antworten uebernommen. Admin ersetzt Adresse/Leistungen; Fehler muessen den
+    Stand erhalten; student leert abschliessend die Leistungen. gzip wird als
+    komprimierter Byte-Body gesendet. Danach den Abschlussordner ausfuehren.
+  type: text/markdown

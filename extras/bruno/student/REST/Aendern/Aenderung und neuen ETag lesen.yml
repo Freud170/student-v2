@@ -1,0 +1,44 @@
+info:
+  name: Aenderung und neuen ETag lesen
+  type: http
+  seq: 4
+
+http:
+  method: GET
+  url: "{{putUrl}}"
+  headers:
+    - name: Accept
+      value: "application/json"
+    - name: Accept-Encoding
+      value: "identity"
+
+runtime:
+  scripts:
+    - type: tests
+      code: |-
+        test('Vollstaendige fachliche Daten und Version', () => {
+            expect(res.getBody()).to.include({
+                matrikelnummer: '777779', nachname: 'Neu',
+                vorname: 'Tina', email: 'put.bruno@h-ka.de', username: 'put-bruno', version: 1
+            });
+            expect(res.getBody().adresse).to.deep.equal({"plz":"53113","ort":"Bonn"});
+            expect(res.getBody().pruefungsleistungen).to.deep.equal([{"modul":"Netze","note":1,"semester":"WS 2026/27"}]);
+        });
+    - type: after-response
+      code: |-
+        if (res.getStatus() === 200) {
+            bru.setVar('putEtag', res.getHeader('etag'));
+            bru.setVar('putSnapshot', JSON.stringify(res.getBody()));
+        }
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "200"
+    - expression: res.headers.etag
+      operator: matches
+      value: '^"1"$'
+
+settings:
+  encodeUrl: true
+  timeout: 5000
+  followRedirects: false

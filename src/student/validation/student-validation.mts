@@ -1,10 +1,20 @@
-// Validierung neuer Studierender mit Zod (Request-Body bei POST).
+// Validierung der vollstaendigen fachlichen Daten bei POST und PUT.
 // "strictObject": unbekannte Felder im JSON werden abgelehnt.
 
 import { z } from 'zod';
 
 const MAX_LENGTH_TEXT = 64;
 const MAX_LENGTH_USERNAME = 20;
+const MAX_INTEGER = 2_147_483_647;
+
+export const StudentIdSchema = z.number().int().positive().max(MAX_INTEGER);
+
+// Ein einzelner starker ETag in der Form, die GET fuer die Version erzeugt.
+export const IfMatchSchema = z
+    .string()
+    .regex(/^"(?:0|[1-9]\d*)"$/u)
+    .transform((value) => Number(value.slice(1, -1)))
+    .pipe(z.number().int().nonnegative().max(MAX_INTEGER));
 
 // Zulaessige Notenstufen wie im CHECK-Constraint der Tabelle pruefungsleistung
 // oxlint-disable-next-line no-magic-numbers
@@ -40,3 +50,7 @@ export const StudentNeuSchema = z.strictObject({
 
 // Aus dem Schema abgeleiteter TypeScript-Typ
 export type StudentNeu = z.infer<typeof StudentNeuSchema>;
+
+// PUT ersetzt das gesamte Aggregate und hat dieselben Pflichtfelder wie POST.
+export const StudentUpdateSchema = StudentNeuSchema;
+export type StudentUpdate = z.infer<typeof StudentUpdateSchema>;

@@ -1,0 +1,55 @@
+info:
+  name: Als admin aendern
+  type: http
+  seq: 3
+
+http:
+  method: PUT
+  url: "{{putUrl}}"
+  headers:
+    - name: Content-Type
+      value: "application/json"
+    - name: If-Match
+      value: "{{putEtag}}"
+    - name: Content-Encoding
+      value: "identity"
+  auth:
+    type: bearer
+    token: "{{adminToken}}"
+  body:
+    type: json
+    data: |-
+      {
+          "matrikelnummer": "777779",
+          "nachname": "Neu",
+          "vorname": "Tina",
+          "email": "put.bruno@h-ka.de",
+          "username": "put-bruno",
+          "adresse": {
+              "plz": "53113",
+              "ort": "Bonn"
+          },
+          "pruefungsleistungen": [
+              {
+                  "modul": "Netze",
+                  "note": 1,
+                  "semester": "WS 2026/27"
+              }
+          ]
+      }
+
+runtime:
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "204"
+    - expression: res.headers.etag
+      operator: matches
+      value: '^"1"$'
+    - expression: res.body
+      operator: isEmpty
+
+settings:
+  encodeUrl: true
+  timeout: 5000
+  followRedirects: false

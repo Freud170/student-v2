@@ -1,0 +1,48 @@
+info:
+  name: Nicht vorhandener Student
+  type: http
+  seq: 11
+
+http:
+  method: PUT
+  url: "{{restUrl}}/999999"
+  headers:
+    - name: Content-Type
+      value: "application/json"
+    - name: If-Match
+      value: "{{putEtag}}"
+  auth:
+    type: bearer
+    token: "{{adminToken}}"
+  body:
+    type: json
+    data: |-
+      {
+          "matrikelnummer": "777779",
+          "nachname": "Neu",
+          "vorname": "Falsch",
+          "email": "put.bruno@h-ka.de",
+          "username": "put-bruno",
+          "adresse": {
+              "plz": "53113",
+              "ort": "Bonn"
+          },
+          "pruefungsleistungen": [
+              {
+                  "modul": "Netze",
+                  "note": 1,
+                  "semester": "WS 2026/27"
+              }
+          ]
+      }
+
+runtime:
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "404"
+
+settings:
+  encodeUrl: true
+  timeout: 5000
+  followRedirects: false

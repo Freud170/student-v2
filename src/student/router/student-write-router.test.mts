@@ -27,6 +27,7 @@ const studentNeu = {
 const setup = (role = 'admin') => {
     const service = {
         create: vi.fn<StudentWriteService['create']>().mockResolvedValue(NEUE_ID),
+        update: vi.fn<StudentWriteService['update']>(),
     };
     const verifier = {
         verify: vi.fn<TokenVerifier['verify']>().mockResolvedValue({

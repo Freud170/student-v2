@@ -1,4 +1,4 @@
-import { type SQL, asc, eq } from 'drizzle-orm';
+import { type SQL, and, asc, eq, ne, sql } from 'drizzle-orm';
 import { adresseTable, pruefungsleistungTable, studentTable } from '../../db/schema.mts';
 import { type Database } from '../../config/db.mts';
 import { type Student } from '../entity/student.mts';
@@ -10,6 +10,13 @@ export type StudentCreate = {
     student: Omit<typeof studentTable.$inferInsert, 'id' | 'version'>;
     adresse: Omit<typeof adresseTable.$inferInsert, 'id' | 'studentId'>;
     pruefungsleistungen: Omit<typeof pruefungsleistungTable.$inferInsert, 'id' | 'studentId'>[];
+};
+
+// Vollstaendige fachliche Daten; Version und Zeitstempel setzt das Repository.
+export type StudentUpdate = {
+    student: Omit<StudentCreate['student'], 'erzeugt' | 'aktualisiert'>;
+    adresse: StudentCreate['adresse'];
+    pruefungsleistungen: StudentCreate['pruefungsleistungen'];
 };
 
 // Spalten, die eindeutig sein muessen (UNIQUE bzw. fachlich eindeutig)
@@ -49,12 +56,61 @@ export class StudentRepository {
         });
     }
 
-    /** Gibt es bereits einen Studierenden mit diesem Wert, z.B. dieser Email? */
-    async existsBy(spalte: UniqueSpalte, wert: string): Promise<boolean> {
+    /**
+     * Ersetzt die fachlichen Daten des Aggregats in einer Transaktion.
+     * @returns neue Version oder undefined, wenn ID und Version nicht zusammen passen
+     */
+    async update(
+        id: number,
+        version: number,
+        { student, adresse, pruefungsleistungen }: StudentUpdate,
+    ): Promise<number | undefined> {
+        return await this.#db.transaction(async (tx) => {
+            // Der Versionsvergleich muss Teil des UPDATE sein: kein getrenntes Lesen/Schreiben.
+            const [updated] = await tx
+                .update(studentTable)
+                .set({
+                    ...student,
+                    version: sql`${studentTable.version} + 1`,
+                    aktualisiert: sql`now()`,
+                })
+                .where(and(eq(studentTable.id, id), eq(studentTable.version, version)))
+                .returning({ version: studentTable.version });
+            if (updated === undefined) {
+                // Kein Treffer: auch die zugehoerigen Daten bleiben unveraendert.
+                return undefined;
+            }
+
+            // Eine vorhandene Adresse behaelt ihre ID; eine fehlende wird angelegt.
+            await tx
+                .insert(adresseTable)
+                .values({ ...adresse, studentId: id })
+                .onConflictDoUpdate({ target: adresseTable.studentId, set: adresse });
+
+            // Leistungen werden als vollstaendige Liste ohne eigene IDs uebergeben.
+            await tx.delete(pruefungsleistungTable).where(eq(pruefungsleistungTable.studentId, id));
+            if (pruefungsleistungen.length > 0) {
+                await tx.insert(pruefungsleistungTable).values(
+                    pruefungsleistungen.map((leistung) => {
+                        return { ...leistung, studentId: id };
+                    }),
+                );
+            }
+            return updated.version;
+        });
+    }
+
+    /** Gibt es diesen Wert bereits? Beim Aendern die eigene ID ausschliessen. */
+    async existsBy(spalte: UniqueSpalte, wert: string, eigeneId?: number): Promise<boolean> {
         const [row] = await this.#db
             .select({ id: studentTable.id })
             .from(studentTable)
-            .where(eq(studentTable[spalte], wert))
+            .where(
+                and(
+                    eq(studentTable[spalte], wert),
+                    eigeneId === undefined ? undefined : ne(studentTable.id, eigeneId),
+                ),
+            )
             .limit(1);
         return row !== undefined;
     }

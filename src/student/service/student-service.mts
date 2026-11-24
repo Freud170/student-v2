@@ -2,11 +2,8 @@ import { type Suchparameter, SuchparameterSchema } from './suchparameter.mts';
 import { type Logger } from 'pino';
 import { NotFoundError } from './errors.mts';
 import { type Student } from '../entity/student.mts';
+import { StudentIdSchema } from '../validation/student-validation.mts';
 import { type StudentRepository } from '../repository/student-repository.mts';
-import { z } from 'zod';
-
-const MAX_ID = 2_147_483_647;
-const idSchema = z.number().int().positive().max(MAX_ID);
 
 /** Validiert Suchkriterien vor dem Persistenzzugriff auf das Student-Aggregate. */
 export class StudentService {
@@ -21,7 +18,7 @@ export class StudentService {
     /** @throws NotFoundError bei ungueltiger oder unbekannter ID */
     async findById(id: number): Promise<Student> {
         this.#logger.debug('findById');
-        const result = idSchema.safeParse(id);
+        const result = StudentIdSchema.safeParse(id);
         if (!result.success) {
             throw new NotFoundError(`Ungueltige ID ${id}`);
         }
