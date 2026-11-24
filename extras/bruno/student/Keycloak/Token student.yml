@@ -1,0 +1,48 @@
+info:
+  name: Token student
+  type: http
+  seq: 2
+
+http:
+  method: POST
+  url: "{{issuer}}/protocol/openid-connect/token"
+  body:
+    type: form-urlencoded
+    data:
+      - name: grant_type
+        value: password
+      - name: username
+        value: "{{process.env.TEST_STUDENT_USERNAME}}"
+      - name: password
+        value: "{{process.env.TEST_STUDENT_PASSWORD}}"
+      - name: client_id
+        value: "{{clientId}}"
+      - name: client_secret
+        value: "{{process.env.CLIENT_SECRET}}"
+
+runtime:
+  scripts:
+    - type: before-request
+      code: |-
+        bru.setVar('studentToken', '');
+        bru.setVar('studentRefreshToken', '');
+    - type: after-response
+      code: |-
+        if (res.getStatus() === 200) {
+            bru.setVar('studentToken', res.getBody().access_token);
+            bru.setVar('studentRefreshToken', res.getBody().refresh_token);
+        }
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "200"
+    - expression: res.body.access_token
+      operator: matches
+      value: ^[^.]+\.[^.]+\.[^.]+$
+    - expression: res.body.refresh_token
+      operator: isNotEmpty
+
+settings:
+  encodeUrl: true
+  timeout: 5000
+  followRedirects: false

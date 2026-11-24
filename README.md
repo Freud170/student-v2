@@ -374,11 +374,19 @@ CORS, Security-Header, Antwortzeitmessung und das Logging ohne Token-Inhalte.
 Die Rollen-Middleware wird mit dem gemeinsamen Verifier ueber den DI-Container
 bereitgestellt. Unit-Tests pruefen die Zugriffsmatrix und stellen sicher, dass
 abgelehnte Anfragen keine schreibenden Services erreichen. Integrationstests
-verwenden echte Anmeldungen der vorhandenen Testbenutzer. Passwoerter stehen
-nur in der ignorierten lokalen `.env`, Tokens nur im Arbeitsspeicher.
-Nach den Tests werden die RC1-Fixtures wiederhergestellt und beide Anmeldungen
-bei Keycloak beendet. 243 Unit-Tests und 34 Integrationstests wurden erfolgreich
-geprueft. Die Token-Anbindung der Bruno-Collection steht noch aus.
+und Bruno verwenden echte Anmeldungen der vorhandenen Testbenutzer. Passwoerter
+stehen nur in ignorierten lokalen `.env`-Dateien, Tokens nur im Arbeitsspeicher.
+Nach den Testlaeufen werden beide Anmeldungen bei Keycloak beendet.
+
+Der Security-Abschluss wurde mit 243 Unit-Tests, 34 Integrationstests und der
+Bruno-Collection (33 Anfragen, 73 Assertions) geprueft. Im neu gebauten
+Compose-App-Container wurden echte Tokens beider Rollen ueber die interne
+JWKS-Adresse akzeptiert; unautorisierte Anfragen lieferten 401 und der
+deaktivierte Dev-Endpunkt 404. Die Pruefsummen aller 100 Keycloak-Tabellen
+und der Studierendentabellen beider PostgreSQL-Instanzen waren danach
+unveraendert. Die RC1-Fixtures wurden nach den schreibenden Tests wiederhergestellt.
+Alle dafuer gestarteten Dienste und Testcontainer wurden anschliessend beendet
+und entfernt; Datenvolumes und Zertifikate blieben erhalten.
 
 ## Anwendungsbasis
 
@@ -715,19 +723,35 @@ Das Ergebnis steht danach unter <http://localhost:9000>. Beenden mit `docker com
 Die Collection `extras/bruno/student` (Format „OpenCollection“)
 enthaelt Requests mit Assertions fuer Health, Suche mit ID (inkl. ETag und
 406), Suche mit Suchparametern und Neuanlegen (inkl. 400 und 422).
-POST- und Dev-Requests enthalten noch keine Tokens und erhalten deshalb aktuell
-401; ihre Umstellung folgt im naechsten Security-Paket. Lese- und Health-Requests
-bleiben ohne Token nutzbar. Voraussetzung fuer diese oeffentlichen Requests:
-PostgreSQL und die Anwendung laufen (`docker compose up -d` in
-`extras\compose\postgres`, dann `pnpm run dev`).
+Lese- und Health-Requests bleiben ohne Token nutzbar. Die komplette Collection
+benoetigt dieselbe lokale Testumgebung wie die Integrationstests: Backend mit
+RC1 und Keycloak, lokale App mit `populate = true`. Der App-Container hat keinen
+Dev-Endpunkt und eignet sich daher nicht fuer den kompletten Collection-Lauf.
 
-In Bruno die Collection ueber *Open Collection* oeffnen und z.B. per Rechtsklick
-*Run* alle Requests ausfuehren. Fuer das selbstsignierte Zertifikat die Option
-*SSL/TLS Certificate Verification* ausschalten. „Neuer Student“ gelingt nur einmal;
-danach die Testdaten mit **Dev > DB neu laden** (`QUERY /dev/db_populate`) oder per
-`reset-data.sql` zuruecksetzen (siehe
-[extras/compose/postgres/ReadMe.md](extras/compose/postgres/ReadMe.md)). Requests mit
-Authentifizierung (Keycloak), PUT, DELETE und GraphQL folgen mit den Funktionen.
+Die ausgefuellte Test-`.env` einmal nach `extras/bruno/student/.env` kopieren
+(eine vorhandene Datei erhalten). Bruno liest die Werte als `process.env.*`.
+In der App die Collection ueber *Open Collection* oeffnen und das vorhandene
+`src/config/tls/certificate.crt` als CA verwenden; TLS-Pruefung aktiviert lassen.
+Die Reihenfolge fuer einen vollstaendigen Lauf ist:
+**Keycloak → Dev → Health → REST → Security → Abschluss**.
+Die beiden Token-Anfragen setzen nur Laufzeitvariablen mit `bru.setVar`.
+POST erbt das Admin-Token; die Security-Anfragen pruefen zusaetzlich `student`
+sowie fehlende und ungueltige Tokens. Abschluss stellt die CSV-Fixtures wieder
+her, meldet beide Sitzungen ab und leert die Token-Variablen. Bei manuellen
+Einzelanfragen ebenfalls abschliessend diesen Ordner ausfuehren. Nach einem
+abgebrochenen Lauf die DB und noch vorhandene Testanmeldungen entsprechend bereinigen.
+
+Mit der zur Bruno-App passenden CLI `4.3.0` ist der komplette Lauf reproduzierbar:
+
+```powershell
+Push-Location extras/bruno/student
+pnpm dlx @usebruno/cli@4.3.0 run -r --cacert ../../../src/config/tls/certificate.crt --noproxy --reporter-skip-all-headers --reporter-skip-body
+Pop-Location
+```
+
+Keine ausfuehrlichen Reports mit Token-Antworten oder Login-Formularen speichern.
+Der Test „kein JSON“ sendet absichtlich rohe Bytes, damit der HTTP-Client daraus
+keinen gueltigen JSON-String erzeugt. PUT, DELETE und GraphQL folgen mit den Funktionen.
 
 ## Abhängigkeiten und Sicherheitslücken
 
@@ -811,10 +835,10 @@ gemeinsam (#28). Keycloak verwendet weiterhin seine bisherige Beta4-Datenbank;
 die Studierendenanwendung verwendet die getrennte RC1-Instanz.
 Keycloak-Konfiguration und Token-Verifier mit `jose` sind umgesetzt und mit
 echten Tokens geprueft. Rollen-Middleware und Endpunktschutz fuer POST und
-DB-Neuladen sind implementiert. Die Integrationstests verwenden echte
-Admin-/Student-Anmeldungen mit explizitem TLS-Vertrauen. Die Token-Anbindung
-der Bruno-Collection und die abschliessende Dokumentation bleiben fuer
-#29/#30/#31 offen.
+DB-Neuladen sind implementiert. Echte Admin-/Student-Anmeldungen werden in
+Integrationstests und Bruno verwendet; TLS-Vertrauen ist explizit konfiguriert.
+Die vorhandene Keycloak-Einrichtung ist damit fuer die Anwendung angebunden
+(#29); Token-Pruefung und Rollenfreigaben sind durchgaengig geprueft (#30/#31).
 
 ## Team
 

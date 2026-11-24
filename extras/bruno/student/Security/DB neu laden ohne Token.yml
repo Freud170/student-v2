@@ -1,0 +1,19 @@
+info:
+  name: DB neu laden ohne Token
+  type: http
+  seq: 4
+
+http:
+  method: QUERY
+  url: "{{baseUrl}}/dev/db_populate"
+
+runtime:
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "401"
+
+settings:
+  encodeUrl: true
+  timeout: 5000
+  followRedirects: false

@@ -10,12 +10,17 @@ http:
     - name: Content-Type
       value: application/json
   body:
-    type: text
+    type: json
     data: |-
       FALSCHES JSON
   auth: inherit
 
 runtime:
+  scripts:
+    - type: before-request
+      code: |-
+        // Exakte Bytes senden: Der JSON-Transport darf den Text nicht als String serialisieren.
+        req.setBody(Buffer.from('FALSCHES JSON'));
   assertions:
     - expression: res.status
       operator: eq

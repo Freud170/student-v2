@@ -18,6 +18,10 @@ request:
   variables:
     - name: baseUrl
       value: https://localhost:3000
+    - name: issuer
+      value: https://localhost:8843/realms/student
+    - name: clientId
+      value: student-client
 bundled: false
 extensions:
   bruno:
